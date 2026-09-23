@@ -17,10 +17,13 @@ const model = createOpenAI({
 }).chat(process.env.NEEV_MODEL ?? 'glm-5-2')
 
 const sandbox = await neev.sandboxes.create({ name: `ai-sdk-${Date.now().toString(36)}` })
-await sandbox.waitUntilReady()
-console.log(`  sandbox ready: ${sandbox.name}`)
 
+// The sandbox holds quota from here, so the try starts here -- waitUntilReady can
+// fail too, and that must not leak it.
 try {
+  await sandbox.waitUntilReady()
+  console.log(`  sandbox ready: ${sandbox.name}`)
+
   const { text } = await generateText({
     model,
     // Without a step limit the loop stops after the first tool call.

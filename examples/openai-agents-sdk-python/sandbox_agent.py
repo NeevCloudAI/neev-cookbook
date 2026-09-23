@@ -36,6 +36,18 @@ async def main() -> None:
     """Start a sandbox, run the agent against it, then delete it."""
     global sandbox
     sandbox = client.sandboxes.create({"name": f"oa-{uuid.uuid4().hex[:8]}"})
+
+    # The sandbox holds quota from here, so the try starts here -- the readiness
+    # wait can fail too, and that must not leak it.
+    try:
+        await _run_agent()
+    finally:
+        sandbox.delete()
+        print("\n  sandbox deleted")
+
+
+async def _run_agent() -> None:
+    """Wait for the sandbox, then run the agent against it."""
     sandbox.wait_until_ready()
     print(f"  sandbox ready: {sandbox.name}")
 
@@ -49,16 +61,12 @@ async def main() -> None:
         ),
     )
 
-    try:
-        result = await Runner.run(
-            agent,
-            "Create a file primes.py that prints the first 10 prime numbers, run it "
-            "with python3, and reply with exactly what it printed.",
-        )
-        print(f"\n  agent: {result.final_output.strip()[:200]}")
-    finally:
-        sandbox.delete()
-        print("\n  sandbox deleted")
+    result = await Runner.run(
+        agent,
+        "Create a file primes.py that prints the first 10 prime numbers, run it "
+        "with python3, and reply with exactly what it printed.",
+    )
+    print(f"\n  agent: {result.final_output.strip()[:200]}")
 
 
 if __name__ == "__main__":

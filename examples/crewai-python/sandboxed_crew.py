@@ -47,16 +47,27 @@ class SandboxTool(BaseTool):
 
 
 def start_sandbox(name: str):
-    """Create a sandbox and wait until it can run commands."""
-    sandbox = client.sandboxes.create({"name": name})
-    sandbox.wait_until_ready()
-    print(f"  sandbox {name} ready")
-    return sandbox
+    """Create a sandbox. The caller owns deleting it from this point on."""
+    return client.sandboxes.create({"name": name})
 
 
 def main() -> None:
     """Give one agent a sandbox, ask it to compute something, print the answer."""
     sandbox = start_sandbox(f"crew-{uuid.uuid4().hex[:8]}")
+
+    # The sandbox holds quota from the moment it exists, so everything after the
+    # create -- including the readiness wait -- runs under the try.
+    try:
+        _run_crew(sandbox)
+    finally:
+        sandbox.delete()
+        print("\n  sandbox deleted")
+
+
+def _run_crew(sandbox) -> None:
+    """Wait for the sandbox, then run the crew against it."""
+    sandbox.wait_until_ready()
+    print(f"  sandbox {sandbox.name} ready")
 
     llm = LLM(
         model=f"openai/{MODEL_NAME}",
@@ -83,12 +94,8 @@ def main() -> None:
         agent=analyst,
     )
 
-    try:
-        result = Crew(agents=[analyst], tasks=[task], verbose=False).kickoff()
-        print(f"\n  result: {str(result).strip()[:200]}")
-    finally:
-        sandbox.delete()
-        print("\n  sandbox deleted")
+    result = Crew(agents=[analyst], tasks=[task], verbose=False).kickoff()
+    print(f"\n  result: {str(result).strip()[:200]}")
 
 
 if __name__ == "__main__":

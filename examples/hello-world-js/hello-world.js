@@ -8,12 +8,16 @@ const neev = new Neev({
 })
 
 const sandbox = await neev.sandboxes.create({ name: 'hello-world-js' })
-await sandbox.waitUntilReady()
-console.log(`sandbox ${sandbox.id} is ${sandbox.phase}`)
 
-const result = await sandbox.exec('sh', { args: ['-lc', 'uname -sr && echo hello from inside'] })
-console.log(result.stdout.trim())
+// Everything after the create belongs in the try: a sandbox holds quota from the
+// moment it exists, so any failure in between must still delete it.
+try {
+  await sandbox.waitUntilReady()
+  console.log(`sandbox ${sandbox.id} is ${sandbox.phase}`)
 
-// A sandbox holds quota until deleted, even once it pauses itself.
-await sandbox.delete()
-console.log('deleted')
+  const result = await sandbox.exec('sh', { args: ['-lc', 'uname -sr && echo hello from inside'] })
+  console.log(result.stdout.trim())
+} finally {
+  await sandbox.delete()
+  console.log('deleted')
+}

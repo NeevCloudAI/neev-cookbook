@@ -6,12 +6,15 @@ client = NeevAI()
 
 # Creates in the org and project resolved from NEEV_ORG_ID / NEEV_PROJECT_ID.
 sandbox = client.sandboxes.create({"name": "hello-world"})
-sandbox.wait_until_ready()
-print(f"sandbox {sandbox.id} is {sandbox.phase}")
 
-result = sandbox.exec("sh", args=["-lc", "uname -sr && echo hello from inside"])
-print(result.stdout.strip())
+# Everything after the create belongs in the try: a sandbox holds quota from the
+# moment it exists, so any failure in between must still delete it.
+try:
+    sandbox.wait_until_ready()
+    print(f"sandbox {sandbox.id} is {sandbox.phase}")
 
-# A sandbox holds quota until deleted, even once it pauses itself.
-sandbox.delete()
-print("deleted")
+    result = sandbox.exec("sh", args=["-lc", "uname -sr && echo hello from inside"])
+    print(result.stdout.strip())
+finally:
+    sandbox.delete()
+    print("deleted")
