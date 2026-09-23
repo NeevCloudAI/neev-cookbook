@@ -8,11 +8,22 @@ Each example runs as written. Set your API key and go.
 
 ## Examples
 
+### Python
+
 | Example | What it shows |
 | --- | --- |
 | [hello-world-python](examples/hello-world-python) | Create a sandbox, run a command, delete it |
+| [langchain-python](examples/langchain-python) | A LangChain agent with sandbox-backed tools |
+| [langgraph-python](examples/langgraph-python) | A two-agent LangGraph crew, a sandbox each, over one MCP URL |
 | [crewai-python](examples/crewai-python) | Replace CrewAI's removed code execution with a sandbox tool |
-| [langgraph-python](examples/langgraph-python) | A two-agent LangGraph crew where each agent gets its own sandbox, over one MCP URL |
+| [openai-agents-sdk-python](examples/openai-agents-sdk-python) | An OpenAI Agents SDK agent with a sandbox tool |
+
+### JavaScript
+
+| Example | What it shows |
+| --- | --- |
+| [hello-world-js](examples/hello-world-js) | Create a sandbox, run a command, delete it |
+| [vercel-ai-sdk-js](examples/vercel-ai-sdk-js) | A Vercel AI SDK agent with a sandbox tool |
 
 ## Connecting
 
@@ -41,6 +52,29 @@ platform directly:
 - [neev-sdk-python](https://github.com/NeevCloudAI/neev-sdk-python)
 - [neev-sdk-js](https://github.com/NeevCloudAI/neev-sdk-js)
 - [neev-cli](https://github.com/NeevCloudAI/neev-cli)
+
+## Models
+
+The examples take any OpenAI-compatible endpoint. NeevCloud serves models too, so
+you do not need a second provider:
+
+```
+https://inference.ai.neevcloud.com/v1
+```
+
+```bash
+curl https://inference.ai.neevcloud.com/v1/chat/completions \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $NEEV_MODEL_API_KEY" \
+  -d '{"model": "glm-5-2", "messages": [{"role": "user", "content": "hello"}]}'
+```
+
+Available models: `glm-5-2`, `glm-4-7`, `deepseek-v3-2`, `kimi-k3`, `minimax-m3`,
+`minimax-m2.7`, `minimax-m2.7-highspeed`, `gpt-oss-120b`, `gpt-oss-20b`,
+`llama-3.3-70b-versatile`, `llama-3.1-8b-instant`, `gemma-4-31b`.
+
+Reasoning models spend tokens thinking before they answer. Give them headroom —
+a low `max_tokens` returns an empty message and no tool call.
 
 ## What a sandbox gives you
 

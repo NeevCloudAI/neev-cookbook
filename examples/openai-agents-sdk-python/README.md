@@ -1,0 +1,29 @@
+# OpenAI Agents SDK with NeevCloud Sandboxes
+
+An Agents SDK agent with a sandbox as its tool.
+
+`OpenAIChatCompletionsModel` is used rather than the default Responses API, so
+this works against any OpenAI-compatible endpoint — including NeevCloud's own
+inference API, which is what the commands below point at.
+
+## Run it
+
+```bash
+pip install -r requirements.txt
+
+export NEEV_API_KEY=...
+export NEEV_ORG_ID=...
+export NEEV_PROJECT_ID=...
+export NEEV_MODEL_BASE_URL=https://inference.ai.neevcloud.com/v1
+export NEEV_MODEL_API_KEY=...
+
+python sandbox_agent.py
+```
+
+The agent writes `primes.py`, runs it, and reports the output.
+
+## Notes
+
+Tracing is disabled — there is no OpenAI account involved, so there is no tracing
+backend to report to. Remove `set_tracing_disabled(True)` if you are using
+api.openai.com and want traces.

@@ -1,0 +1,3 @@
+langchain>=1.0
+langchain-openai>=0.3
+neevai>=0.7.0b0
