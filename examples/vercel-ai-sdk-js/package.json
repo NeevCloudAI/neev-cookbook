@@ -5,7 +5,7 @@
   "scripts": { "start": "node sandbox-agent.js" },
   "dependencies": {
     "@ai-sdk/openai": "^2.0.0",
-    "@neevcloud/sdk": "^0.7.0-beta",
+    "@neevcloud/sdk": "^0.8.0",
     "ai": "^5.0.0",
     "zod": "^3.23.0"
   }

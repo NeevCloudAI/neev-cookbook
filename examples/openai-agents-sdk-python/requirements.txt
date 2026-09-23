@@ -1,2 +1,2 @@
 openai-agents>=0.22
-neevai>=0.7.0b0
+neevai>=0.8.0

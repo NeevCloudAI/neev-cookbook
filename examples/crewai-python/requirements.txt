@@ -1,2 +1,2 @@
 crewai>=1.0
-neevai>=0.7.0b0
+neevai>=0.8.0
