@@ -18,7 +18,7 @@ There is no CLI to install and no bridge process to run. Any MCP client connects
 with a URL and an API key:
 
 ```
-https://mcp.sandboxes.<region>.ai.neevcloud.com/mcp
+https://mcp.sandboxes.as-south-1.ai.neevcloud.com/mcp
 ```
 
 Send your key as a bearer token and name the sandbox you want to work in:
