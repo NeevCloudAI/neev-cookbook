@@ -10,7 +10,9 @@ Each example runs as written. Set your API key and go.
 
 | Example | What it shows |
 | --- | --- |
-| [langgraph-python](examples/langgraph-python) | A two-agent LangGraph crew where each agent gets its own sandbox, connected over a single MCP URL |
+| [hello-world-python](examples/hello-world-python) | Create a sandbox, run a command, delete it |
+| [crewai-python](examples/crewai-python) | Replace CrewAI's removed code execution with a sandbox tool |
+| [langgraph-python](examples/langgraph-python) | A two-agent LangGraph crew where each agent gets its own sandbox, over one MCP URL |
 
 ## Connecting
 
