@@ -15,7 +15,7 @@ try {
   await sandbox.waitUntilReady()
   console.log(`sandbox ${sandbox.id} is ${sandbox.phase}`)
 
-  const result = await sandbox.exec('sh', { args: ['-lc', 'uname -sr && echo hello from inside'] })
+  const result = await sandbox.exec('sh', { args: ['-lc', 'uname -sm && echo hello from inside'] })
   console.log(result.stdout.trim())
 } finally {
   await sandbox.delete()

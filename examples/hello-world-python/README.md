@@ -15,8 +15,8 @@ python hello_world.py
 Output:
 
 ```
-sandbox 01a0ce3a-72d4-7c8d-a80e-5809d8ea9a68 is Ready
-Linux 4.19.0-gvisor
+sandbox 01a1103d-833f-7458-9d79-538a9d198c7b is Ready
+Linux x86_64
 hello from inside
 deleted
 ```

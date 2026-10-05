@@ -1,0 +1,183 @@
+name: nightly
+
+# Runs every recipe end to end against production each night, so a recipe that
+# stops working is caught before a reader finds it.
+#
+# Needs, on a project used only for this check:
+#   secrets   NEEV_API_KEY (Resource Type Sandboxes), NEEV_MODEL_API_KEY (Resource Type Model API)
+#   variables NEEV_ORG_ID, NEEV_PROJECT_ID
+#
+# Not covered, and why:
+#   - The coding-agent apps themselves (Claude Code, Cursor, Codex): claude-code-over-mcp runs
+#     simulate_agent.py, the same MCP session driven by a model, instead.
+#   - Separate keys per agent in mcp-agent-crew: the check runs every agent on one key, so
+#     per-agent attribution is covered by the recipe's unit tests only.
+#   - The keep-alive window of prompt-to-live-app: it runs with --keep 0; the URL is still
+#     checked, because the recipe waits until the URL answers before printing it.
+#   - The framework examples under examples/: they show integrations rather than results,
+#     and several need a third-party framework's own setup.
+
+on:
+  schedule:
+    - cron: "30 1 * * *" # 07:00 IST
+  workflow_dispatch:
+    inputs:
+      recipes:
+        description: "Space-separated recipe names to run (empty runs all). A filtered run never opens or updates the failure issue."
+        required: false
+        default: ""
+
+permissions:
+  contents: read
+
+concurrency:
+  group: nightly
+  cancel-in-progress: false
+
+env:
+  NEEV_API_KEY: ${{ secrets.NEEV_API_KEY }}
+  NEEV_MODEL_API_KEY: ${{ secrets.NEEV_MODEL_API_KEY }}
+  NEEV_ORG_ID: ${{ vars.NEEV_ORG_ID }}
+  NEEV_PROJECT_ID: ${{ vars.NEEV_PROJECT_ID }}
+
+jobs:
+  plan:
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.pick.outputs.matrix }}
+    steps:
+      - id: pick
+        env:
+          FILTER: ${{ inputs.recipes }}
+        run: |
+          python3 - <<'PY' >> "$GITHUB_OUTPUT"
+          import json, os
+          recipes = [
+              {"name": "prompt-to-live-app-python", "lang": "python", "cmd": "python app_builder.py --keep 0"},
+              {"name": "prompt-to-live-app-js", "lang": "node", "cmd": "npm start -- --keep 0"},
+              {"name": "claude-code-over-mcp", "lang": "python", "cmd": "python simulate_agent.py"},
+              {"name": "agent-session-report-python", "lang": "python", "cmd": "python session_report.py --out ../../report.md"},
+              {"name": "injection-proof-agent-python", "lang": "python", "cmd": "python injection_demo.py"},
+              {"name": "undo-agent-mistake-python", "lang": "python", "cmd": "python undo_mistake.py"},
+              {"name": "best-of-n-fork-python", "lang": "python", "cmd": "python best_of_n.py"},
+              {"name": "ai-data-analyst-python", "lang": "python", "cmd": "python analyst.py"},
+              {"name": "mcp-agent-crew-python", "lang": "python", "cmd": "python crew.py"},
+              {"name": "mcp-agent-undo-python", "lang": "python", "cmd": "python guarded_migration.py"},
+              {"name": "supply-chain-safe-installs-python", "lang": "python", "cmd": "python safe_install.py"},
+              {"name": "audit-evidence-pack-python", "lang": "python", "cmd": "python evidence_pack.py --demo"},
+              {"name": "agent-that-sleeps-python", "lang": "python", "cmd": "python sleepy_agent.py"},
+              {"name": "golden-snapshot-python", "lang": "python", "cmd": "python golden_snapshot.py"},
+              {"name": "code-grader-python", "lang": "python", "cmd": "python grader.py"},
+              {"name": "untrusted-code-runner-js", "lang": "node", "cmd": "npm run demo"},
+              {"name": "human-review-gate-python", "lang": "python", "cmd": "python review_gate.py --reject"},
+              {"name": "debug-at-failure-python", "lang": "python", "cmd": "python debug_at_failure.py"},
+              {"name": "egress-approval-python", "lang": "python", "cmd": "python egress_approval.py --auto-approve api.github.com --auto-deny"},
+              {"name": "coding-tutor-python", "lang": "python", "cmd": "python coding_tutor.py"},
+              {"name": "report-generator-python", "lang": "python", "cmd": "python report.py"},
+              {"name": "fix-failing-test-python", "lang": "python", "cmd": "python fix_test.py"},
+              {"name": "code-mode-mcp-python", "lang": "python", "cmd": "python code_mode.py"},
+              {"name": "quarantine-mcp-server-python", "lang": "python", "cmd": "python quarantine.py"},
+              {"name": "eval-rollouts-python", "lang": "python", "cmd": "python eval_rollouts.py"},
+              {"name": "injection-proof-agent-js", "lang": "node", "cmd": "npm start"},
+              {"name": "undo-agent-mistake-js", "lang": "node", "cmd": "npm start"},
+              {"name": "hosted-agent-python", "lang": "python", "cmd": "python hosted_agent.py"},
+          ]
+          wanted = os.environ.get("FILTER", "").split()
+          unknown = sorted(set(wanted) - {r["name"] for r in recipes})
+          if unknown:
+              raise SystemExit(f"unknown recipes: {' '.join(unknown)}")
+          picked = [r for r in recipes if not wanted or r["name"] in wanted]
+          print("matrix=" + json.dumps({"include": picked}))
+          PY
+
+  run:
+    needs: plan
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      max-parallel: 3
+      matrix: ${{ fromJSON(needs.plan.outputs.matrix) }}
+    name: ${{ matrix.name }}
+    steps:
+      - uses: actions/checkout@v4
+      - if: matrix.lang == 'python'
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - if: matrix.lang == 'node'
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Install
+        working-directory: recipes/${{ matrix.name }}
+        run: |
+          if [ "${{ matrix.lang }}" = python ]; then pip install -q -r requirements.txt; else npm install --no-audit --no-fund; fi
+      - name: Run
+        run: .github/scripts/run_recipe.sh "${{ matrix.name }}" "recipes/${{ matrix.name }}" sh -c "${{ matrix.cmd }}"
+      - if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: result-${{ matrix.name }}
+          path: results/
+          if-no-files-found: ignore
+
+  report:
+    needs: [plan, run]
+    if: always()
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: result-*
+          path: results
+          merge-multiple: true
+      - name: Results table
+        id: table
+        run: |
+          python3 - <<'PY'
+          import glob, json, os
+          rows = [json.load(open(f)) for f in sorted(glob.glob("results/*.json"))]
+          lines = ["| Recipe | Result | Time | Model | Attempts |", "| --- | --- | --- | --- | --- |"]
+          for r in rows:
+              mark = "pass" if r["status"] == "pass" else "**fail**"
+              lines.append(f"| {r['name']} | {mark} | {r['duration_s']}s | {r['model']} | {r['attempts']} |")
+          failed = [r["name"] for r in rows if r["status"] != "pass"]
+          with open(os.environ["GITHUB_STEP_SUMMARY"], "a") as out:
+              out.write("## Nightly recipe run\n\n" + "\n".join(lines) + "\n")
+          with open(os.environ["GITHUB_OUTPUT"], "a") as out:
+              out.write(f"failed={' '.join(failed)}\n")
+          PY
+      - name: Open or update the failure issue
+        # Only full scheduled or unfiltered runs report; a filtered manual run never does.
+        if: inputs.recipes == '' && (needs.run.result == 'failure' || steps.table.outputs.failed != '')
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          FAILED: ${{ steps.table.outputs.failed }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          gh label create nightly-failure --color B60205 --description "The nightly recipe run failed" 2>/dev/null || true
+          body="Failed: ${FAILED:-see the run}. Run: $RUN_URL"
+          issue=$(gh issue list --label nightly-failure --state open --json number --jq '.[0].number')
+          if [ -n "$issue" ]; then
+            gh issue comment "$issue" --body "$body"
+          else
+            gh issue create --title "Nightly recipe run failed" --label nightly-failure --body "$body"
+          fi
+
+  cleanup:
+    needs: run
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -q "neevai>=0.8.2,<0.9"
+      - name: Delete leftover recipe sandboxes
+        run: python .github/scripts/cleanup_sandboxes.py

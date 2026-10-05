@@ -6,6 +6,7 @@ install, and the one site it is allowed to visit. Nothing else.
 """
 
 import os
+import sys
 import uuid
 
 from neevai import NeevAI
@@ -17,7 +18,11 @@ TARGET = os.environ.get("TARGET_URL", "https://example.com")
 ALLOWED = [
     {"host": "pypi.org"},
     {"host": "files.pythonhosted.org"},
+    # Playwright's CDN redirects Chrome downloads to Google storage, and the
+    # rest (ffmpeg) to Microsoft's download host.
     {"host": "cdn.playwright.dev"},
+    {"host": "storage.googleapis.com"},
+    {"host": "playwright.download.prss.microsoft.com"},
     # playwright install --with-deps shells out to apt.
     {"host": "archive.ubuntu.com"},
     {"host": "security.ubuntu.com"},
@@ -40,8 +45,8 @@ with sync_playwright() as p:
 client = NeevAI()
 
 
-def main() -> None:
-    """Install a browser in the sandbox, screenshot a page, save it locally."""
+def main() -> int:
+    """Install a browser in the sandbox, screenshot a page, save it locally; returns the exit code."""
     sandbox = client.sandboxes.create(
         {
             "name": f"pw-{uuid.uuid4().hex[:8]}",
@@ -64,13 +69,13 @@ def main() -> None:
         )
         if install.exit_code != 0:
             print(f"  install failed: {(install.stderr or install.stdout)[-400:]}")
-            return
+            return 1
 
         sandbox.files.write("shot.py", SCRIPT.replace("TARGET_URL", TARGET))
         run = sandbox.exec("python3", args=["shot.py"], timeout_ms=180_000)
         if run.exit_code != 0:
             print(f"  run failed: {(run.stderr or run.stdout)[-400:]}")
-            return
+            return 1
         print(f"  page title: {run.stdout.strip()}")
 
         png = sandbox.files.read("shot.png")
@@ -81,14 +86,16 @@ def main() -> None:
         # The allow-list is real: a host that is not on it cannot be reached.
         blocked = sandbox.exec(
             "sh",
-            args=["-lc", "curl -s -m 10 -o /dev/null -w '%{http_code}' https://wikipedia.org || echo blocked"],
+            args=["-lc", "curl -s -m 10 -o /dev/null -w '%{http_code}' https://wikipedia.org"],
             timeout_ms=30_000,
         )
-        print(f"  reaching a host not on the allow-list: {blocked.stdout.strip() or 'blocked'}")
+        code = blocked.stdout.strip()
+        print(f"  reaching a host not on the allow-list: {'blocked' if code in ('', '000') else 'HTTP ' + code}")
+        return 0
     finally:
         sandbox.delete()
         print("\n  sandbox deleted")
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())

@@ -38,7 +38,7 @@ two agents, two sandboxes, one MCP URL
 
   created crew-researcher
   created crew-writer
-  researcher: Linux 4.19.0-gvisor
+  researcher: Linux x86_64
   writer: NOT FOUND
 
   researcher reads its own note : True
