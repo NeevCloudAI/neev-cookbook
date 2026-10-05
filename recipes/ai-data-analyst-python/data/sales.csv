@@ -1,0 +1,385 @@
+month,city,category,orders,revenue_inr
+2025-01,Mumbai,Electronics,2526,10293844
+2025-01,Mumbai,Apparel,3344,4897655
+2025-01,Mumbai,Groceries,6522,4155377
+2025-01,Mumbai,Home & Kitchen,2111,3827095
+2025-01,Delhi,Electronics,2409,10120570
+2025-01,Delhi,Apparel,3453,5234027
+2025-01,Delhi,Groceries,7286,4476276
+2025-01,Delhi,Home & Kitchen,2057,4020196
+2025-01,Bengaluru,Electronics,2323,9296861
+2025-01,Bengaluru,Apparel,3339,4707091
+2025-01,Bengaluru,Groceries,5870,3674869
+2025-01,Bengaluru,Home & Kitchen,1898,3770886
+2025-01,Hyderabad,Electronics,1673,7256854
+2025-01,Hyderabad,Apparel,2285,3468478
+2025-01,Hyderabad,Groceries,4777,2974626
+2025-01,Hyderabad,Home & Kitchen,1339,2428045
+2025-01,Chennai,Electronics,1492,6329163
+2025-01,Chennai,Apparel,2363,3534604
+2025-01,Chennai,Groceries,4943,3041201
+2025-01,Chennai,Home & Kitchen,1425,2626473
+2025-01,Kolkata,Electronics,1528,6257509
+2025-01,Kolkata,Apparel,2226,3190358
+2025-01,Kolkata,Groceries,4112,2554111
+2025-01,Kolkata,Home & Kitchen,1115,2028441
+2025-01,Pune,Electronics,1269,5443907
+2025-01,Pune,Apparel,1687,2423340
+2025-01,Pune,Groceries,3564,2271806
+2025-01,Pune,Home & Kitchen,1132,2062744
+2025-01,Ahmedabad,Electronics,1178,4751767
+2025-01,Ahmedabad,Apparel,1767,2675453
+2025-01,Ahmedabad,Groceries,3492,2182694
+2025-01,Ahmedabad,Home & Kitchen,903,1646431
+2025-02,Mumbai,Electronics,2347,9445101
+2025-02,Mumbai,Apparel,3331,5051796
+2025-02,Mumbai,Groceries,6904,4454635
+2025-02,Mumbai,Home & Kitchen,2126,4150645
+2025-02,Delhi,Electronics,2515,10772053
+2025-02,Delhi,Apparel,3324,4805182
+2025-02,Delhi,Groceries,6694,3956170
+2025-02,Delhi,Home & Kitchen,1822,3485200
+2025-02,Bengaluru,Electronics,2222,9773287
+2025-02,Bengaluru,Apparel,3260,4877644
+2025-02,Bengaluru,Groceries,6372,3983041
+2025-02,Bengaluru,Home & Kitchen,1938,3510636
+2025-02,Hyderabad,Electronics,1610,6714410
+2025-02,Hyderabad,Apparel,2436,3506801
+2025-02,Hyderabad,Groceries,4687,2809722
+2025-02,Hyderabad,Home & Kitchen,1360,2612092
+2025-02,Chennai,Electronics,1511,6041907
+2025-02,Chennai,Apparel,2427,3492155
+2025-02,Chennai,Groceries,4357,2820314
+2025-02,Chennai,Home & Kitchen,1359,2694959
+2025-02,Kolkata,Electronics,1486,6270490
+2025-02,Kolkata,Apparel,2061,2869100
+2025-02,Kolkata,Groceries,4506,2776859
+2025-02,Kolkata,Home & Kitchen,1172,2147856
+2025-02,Pune,Electronics,1337,5886756
+2025-02,Pune,Apparel,1872,2797749
+2025-02,Pune,Groceries,3925,2437177
+2025-02,Pune,Home & Kitchen,1124,2185220
+2025-02,Ahmedabad,Electronics,1260,5050753
+2025-02,Ahmedabad,Apparel,1606,2268701
+2025-02,Ahmedabad,Groceries,3171,1922990
+2025-02,Ahmedabad,Home & Kitchen,973,1796636
+2025-03,Mumbai,Electronics,2469,9858299
+2025-03,Mumbai,Apparel,4373,6476900
+2025-03,Mumbai,Groceries,6680,4022761
+2025-03,Mumbai,Home & Kitchen,2142,3924403
+2025-03,Delhi,Electronics,2467,9882502
+2025-03,Delhi,Apparel,4027,5944551
+2025-03,Delhi,Groceries,6914,4412963
+2025-03,Delhi,Home & Kitchen,2121,4225444
+2025-03,Bengaluru,Electronics,2107,8835744
+2025-03,Bengaluru,Apparel,3538,5255369
+2025-03,Bengaluru,Groceries,6247,3744462
+2025-03,Bengaluru,Home & Kitchen,1758,3178399
+2025-03,Hyderabad,Electronics,1711,6967202
+2025-03,Hyderabad,Apparel,2966,4438106
+2025-03,Hyderabad,Groceries,5321,3241046
+2025-03,Hyderabad,Home & Kitchen,1425,2783028
+2025-03,Chennai,Electronics,1587,6764132
+2025-03,Chennai,Apparel,2940,4297253
+2025-03,Chennai,Groceries,4735,2803338
+2025-03,Chennai,Home & Kitchen,1319,2618673
+2025-03,Kolkata,Electronics,1359,5453276
+2025-03,Kolkata,Apparel,2470,3512607
+2025-03,Kolkata,Groceries,4294,2591033
+2025-03,Kolkata,Home & Kitchen,1165,2158587
+2025-03,Pune,Electronics,1423,6092543
+2025-03,Pune,Apparel,2113,3127929
+2025-03,Pune,Groceries,4142,2559815
+2025-03,Pune,Home & Kitchen,1072,1937673
+2025-03,Ahmedabad,Electronics,1280,5160710
+2025-03,Ahmedabad,Apparel,1817,2518814
+2025-03,Ahmedabad,Groceries,3659,2381772
+2025-03,Ahmedabad,Home & Kitchen,1032,2046886
+2025-04,Mumbai,Electronics,2612,10501068
+2025-04,Mumbai,Apparel,3525,5183370
+2025-04,Mumbai,Groceries,7406,4712949
+2025-04,Mumbai,Home & Kitchen,2138,3907149
+2025-04,Delhi,Electronics,2357,10341189
+2025-04,Delhi,Apparel,3542,4976730
+2025-04,Delhi,Groceries,6832,4428694
+2025-04,Delhi,Home & Kitchen,1921,3504121
+2025-04,Bengaluru,Electronics,2442,10410344
+2025-04,Bengaluru,Apparel,3289,4753324
+2025-04,Bengaluru,Groceries,6469,4087331
+2025-04,Bengaluru,Home & Kitchen,1877,3584600
+2025-04,Hyderabad,Electronics,1937,8263385
+2025-04,Hyderabad,Apparel,2559,3575586
+2025-04,Hyderabad,Groceries,5240,3102150
+2025-04,Hyderabad,Home & Kitchen,1578,2988381
+2025-04,Chennai,Electronics,1645,6769530
+2025-04,Chennai,Apparel,2474,3567556
+2025-04,Chennai,Groceries,4749,2857960
+2025-04,Chennai,Home & Kitchen,1290,2347203
+2025-04,Kolkata,Electronics,1412,6072448
+2025-04,Kolkata,Apparel,2186,3072962
+2025-04,Kolkata,Groceries,3942,2387749
+2025-04,Kolkata,Home & Kitchen,1265,2342436
+2025-04,Pune,Electronics,1429,5772923
+2025-04,Pune,Apparel,2173,3174866
+2025-04,Pune,Groceries,4114,2675426
+2025-04,Pune,Home & Kitchen,1200,2228816
+2025-04,Ahmedabad,Electronics,1234,5416547
+2025-04,Ahmedabad,Apparel,1765,2667363
+2025-04,Ahmedabad,Groceries,3490,2120100
+2025-04,Ahmedabad,Home & Kitchen,1021,1855891
+2025-05,Mumbai,Electronics,2704,11360488
+2025-05,Mumbai,Apparel,3353,4765918
+2025-05,Mumbai,Groceries,7390,4744621
+2025-05,Mumbai,Home & Kitchen,2231,4181808
+2025-05,Delhi,Electronics,2568,10794573
+2025-05,Delhi,Apparel,3530,5308070
+2025-05,Delhi,Groceries,7221,4506442
+2025-05,Delhi,Home & Kitchen,1857,3471215
+2025-05,Bengaluru,Electronics,2477,10315199
+2025-05,Bengaluru,Apparel,3183,4780645
+2025-05,Bengaluru,Groceries,6737,4276380
+2025-05,Bengaluru,Home & Kitchen,1939,3635051
+2025-05,Hyderabad,Electronics,1878,7897798
+2025-05,Hyderabad,Apparel,2855,4175496
+2025-05,Hyderabad,Groceries,5222,3255690
+2025-05,Hyderabad,Home & Kitchen,1605,3121742
+2025-05,Chennai,Electronics,1543,6493851
+2025-05,Chennai,Apparel,2568,3712671
+2025-05,Chennai,Groceries,4569,2731592
+2025-05,Chennai,Home & Kitchen,1402,2746596
+2025-05,Kolkata,Electronics,1550,6440312
+2025-05,Kolkata,Apparel,1994,2836047
+2025-05,Kolkata,Groceries,4358,2700111
+2025-05,Kolkata,Home & Kitchen,1219,2247567
+2025-05,Pune,Electronics,1491,6049423
+2025-05,Pune,Apparel,2217,3101752
+2025-05,Pune,Groceries,4098,2651337
+2025-05,Pune,Home & Kitchen,1157,2166286
+2025-05,Ahmedabad,Electronics,1207,4868695
+2025-05,Ahmedabad,Apparel,1706,2569199
+2025-05,Ahmedabad,Groceries,3639,2218622
+2025-05,Ahmedabad,Home & Kitchen,989,1836924
+2025-06,Mumbai,Electronics,2398,9885791
+2025-06,Mumbai,Apparel,3422,5191834
+2025-06,Mumbai,Groceries,7056,4432119
+2025-06,Mumbai,Home & Kitchen,1991,3796838
+2025-06,Delhi,Electronics,2342,9620292
+2025-06,Delhi,Apparel,3151,4503073
+2025-06,Delhi,Groceries,6797,4405448
+2025-06,Delhi,Home & Kitchen,1698,3180287
+2025-06,Bengaluru,Electronics,2370,9720549
+2025-06,Bengaluru,Apparel,3264,4909453
+2025-06,Bengaluru,Groceries,6761,4071468
+2025-06,Bengaluru,Home & Kitchen,1885,3425895
+2025-06,Hyderabad,Electronics,1729,7544394
+2025-06,Hyderabad,Apparel,2613,3942852
+2025-06,Hyderabad,Groceries,5438,3477727
+2025-06,Hyderabad,Home & Kitchen,1520,2946203
+2025-06,Chennai,Electronics,1458,6283395
+2025-06,Chennai,Apparel,2197,3162451
+2025-06,Chennai,Groceries,4609,2950025
+2025-06,Chennai,Home & Kitchen,1298,2352036
+2025-06,Kolkata,Electronics,1284,5144899
+2025-06,Kolkata,Apparel,1962,2907215
+2025-06,Kolkata,Groceries,4220,2534898
+2025-06,Kolkata,Home & Kitchen,1104,2121134
+2025-06,Pune,Electronics,1311,5275115
+2025-06,Pune,Apparel,2094,3160081
+2025-06,Pune,Groceries,4589,2724669
+2025-06,Pune,Home & Kitchen,1180,2189494
+2025-06,Ahmedabad,Electronics,1103,4522718
+2025-06,Ahmedabad,Apparel,1521,2307150
+2025-06,Ahmedabad,Groceries,3439,2120463
+2025-06,Ahmedabad,Home & Kitchen,985,1861082
+2025-07,Mumbai,Electronics,2234,9161368
+2025-07,Mumbai,Apparel,3132,4693777
+2025-07,Mumbai,Groceries,7885,4934982
+2025-07,Mumbai,Home & Kitchen,1949,3558320
+2025-07,Delhi,Electronics,2056,8520717
+2025-07,Delhi,Apparel,2967,4393068
+2025-07,Delhi,Groceries,7330,4703016
+2025-07,Delhi,Home & Kitchen,1806,3431093
+2025-07,Bengaluru,Electronics,2096,8730895
+2025-07,Bengaluru,Apparel,3469,4889908
+2025-07,Bengaluru,Groceries,7332,4565848
+2025-07,Bengaluru,Home & Kitchen,1798,3345630
+2025-07,Hyderabad,Electronics,1623,7044715
+2025-07,Hyderabad,Apparel,2653,3978236
+2025-07,Hyderabad,Groceries,5919,3494637
+2025-07,Hyderabad,Home & Kitchen,1352,2515801
+2025-07,Chennai,Electronics,1443,6170558
+2025-07,Chennai,Apparel,2245,3202383
+2025-07,Chennai,Groceries,5297,3125129
+2025-07,Chennai,Home & Kitchen,1216,2235714
+2025-07,Kolkata,Electronics,1262,5193245
+2025-07,Kolkata,Apparel,2017,3065123
+2025-07,Kolkata,Groceries,4396,2650049
+2025-07,Kolkata,Home & Kitchen,1136,2171193
+2025-07,Pune,Electronics,1402,5988929
+2025-07,Pune,Apparel,2262,3337692
+2025-07,Pune,Groceries,4445,2773174
+2025-07,Pune,Home & Kitchen,1323,2569503
+2025-07,Ahmedabad,Electronics,1077,4414868
+2025-07,Ahmedabad,Apparel,1669,2369681
+2025-07,Ahmedabad,Groceries,3812,2471027
+2025-07,Ahmedabad,Home & Kitchen,933,1709998
+2025-08,Mumbai,Electronics,2615,11021146
+2025-08,Mumbai,Apparel,3421,4739625
+2025-08,Mumbai,Groceries,7387,4557484
+2025-08,Mumbai,Home & Kitchen,2014,3930946
+2025-08,Delhi,Electronics,2531,10378343
+2025-08,Delhi,Apparel,3733,5455291
+2025-08,Delhi,Groceries,6991,4397338
+2025-08,Delhi,Home & Kitchen,1939,3518119
+2025-08,Bengaluru,Electronics,2642,11109487
+2025-08,Bengaluru,Apparel,3629,5226338
+2025-08,Bengaluru,Groceries,7589,4531903
+2025-08,Bengaluru,Home & Kitchen,2188,4009286
+2025-08,Hyderabad,Electronics,2099,8612356
+2025-08,Hyderabad,Apparel,2890,4239864
+2025-08,Hyderabad,Groceries,5299,3167393
+2025-08,Hyderabad,Home & Kitchen,1749,3481132
+2025-08,Chennai,Electronics,1809,7873727
+2025-08,Chennai,Apparel,2642,3766275
+2025-08,Chennai,Groceries,4712,2826835
+2025-08,Chennai,Home & Kitchen,1392,2549295
+2025-08,Kolkata,Electronics,1495,6421915
+2025-08,Kolkata,Apparel,2203,3056411
+2025-08,Kolkata,Groceries,4641,2812564
+2025-08,Kolkata,Home & Kitchen,1348,2452635
+2025-08,Pune,Electronics,1581,6496711
+2025-08,Pune,Apparel,2533,3830093
+2025-08,Pune,Groceries,4987,3181034
+2025-08,Pune,Home & Kitchen,1325,2471446
+2025-08,Ahmedabad,Electronics,1226,5006812
+2025-08,Ahmedabad,Apparel,1658,2294663
+2025-08,Ahmedabad,Groceries,3393,2038996
+2025-08,Ahmedabad,Home & Kitchen,1005,1817916
+2025-09,Mumbai,Electronics,2628,11405704
+2025-09,Mumbai,Apparel,3846,5452866
+2025-09,Mumbai,Groceries,7471,4787668
+2025-09,Mumbai,Home & Kitchen,2091,4005026
+2025-09,Delhi,Electronics,2448,10081311
+2025-09,Delhi,Apparel,3549,5317155
+2025-09,Delhi,Groceries,7540,4484381
+2025-09,Delhi,Home & Kitchen,2141,4187811
+2025-09,Bengaluru,Electronics,2680,10840513
+2025-09,Bengaluru,Apparel,4044,5787645
+2025-09,Bengaluru,Groceries,7576,4760820
+2025-09,Bengaluru,Home & Kitchen,2102,3819680
+2025-09,Hyderabad,Electronics,2150,9147238
+2025-09,Hyderabad,Apparel,2711,3744484
+2025-09,Hyderabad,Groceries,6009,3557836
+2025-09,Hyderabad,Home & Kitchen,1797,3396245
+2025-09,Chennai,Electronics,1789,7624351
+2025-09,Chennai,Apparel,2671,3840600
+2025-09,Chennai,Groceries,5298,3277074
+2025-09,Chennai,Home & Kitchen,1403,2660232
+2025-09,Kolkata,Electronics,1477,6069875
+2025-09,Kolkata,Apparel,2287,3436323
+2025-09,Kolkata,Groceries,4174,2597596
+2025-09,Kolkata,Home & Kitchen,1316,2520505
+2025-09,Pune,Electronics,1860,7986172
+2025-09,Pune,Apparel,2580,3576382
+2025-09,Pune,Groceries,5413,3265315
+2025-09,Pune,Home & Kitchen,1402,2766408
+2025-09,Ahmedabad,Electronics,1323,5506928
+2025-09,Ahmedabad,Apparel,1797,2566270
+2025-09,Ahmedabad,Groceries,3764,2335167
+2025-09,Ahmedabad,Home & Kitchen,1110,2189309
+2025-10,Mumbai,Electronics,4752,20370587
+2025-10,Mumbai,Apparel,6456,9387641
+2025-10,Mumbai,Groceries,8532,5052065
+2025-10,Mumbai,Home & Kitchen,3091,5851643
+2025-10,Delhi,Electronics,4801,20948802
+2025-10,Delhi,Apparel,6359,8926474
+2025-10,Delhi,Groceries,8571,5562998
+2025-10,Delhi,Home & Kitchen,2961,5462755
+2025-10,Bengaluru,Electronics,5043,22025800
+2025-10,Bengaluru,Apparel,6406,9599031
+2025-10,Bengaluru,Groceries,9599,5676519
+2025-10,Bengaluru,Home & Kitchen,3164,6153644
+2025-10,Hyderabad,Electronics,3918,16008855
+2025-10,Hyderabad,Apparel,4978,7306974
+2025-10,Hyderabad,Groceries,6751,4363438
+2025-10,Hyderabad,Home & Kitchen,2556,4680529
+2025-10,Chennai,Electronics,3168,12734056
+2025-10,Chennai,Apparel,4192,6048893
+2025-10,Chennai,Groceries,6013,3825097
+2025-10,Chennai,Home & Kitchen,2122,3869720
+2025-10,Kolkata,Electronics,2948,12997785
+2025-10,Kolkata,Apparel,4658,6803286
+2025-10,Kolkata,Groceries,5354,3475025
+2025-10,Kolkata,Home & Kitchen,1829,3644112
+2025-10,Pune,Electronics,3469,13858256
+2025-10,Pune,Apparel,4704,6746244
+2025-10,Pune,Groceries,6893,4452944
+2025-10,Pune,Home & Kitchen,2451,4839302
+2025-10,Ahmedabad,Electronics,2368,9775250
+2025-10,Ahmedabad,Apparel,3036,4554621
+2025-10,Ahmedabad,Groceries,4074,2509943
+2025-10,Ahmedabad,Home & Kitchen,1542,2980529
+2025-11,Mumbai,Electronics,4523,18709705
+2025-11,Mumbai,Apparel,5792,8232906
+2025-11,Mumbai,Groceries,9087,5529237
+2025-11,Mumbai,Home & Kitchen,2954,5762445
+2025-11,Delhi,Electronics,3859,15976448
+2025-11,Delhi,Apparel,5770,8555985
+2025-11,Delhi,Groceries,9030,5786970
+2025-11,Delhi,Home & Kitchen,2833,5446880
+2025-11,Bengaluru,Electronics,4475,18596793
+2025-11,Bengaluru,Apparel,6143,9260133
+2025-11,Bengaluru,Groceries,9094,5713425
+2025-11,Bengaluru,Home & Kitchen,3006,5632627
+2025-11,Hyderabad,Electronics,3085,12536788
+2025-11,Hyderabad,Apparel,4756,6976594
+2025-11,Hyderabad,Groceries,7379,4441217
+2025-11,Hyderabad,Home & Kitchen,2477,4772011
+2025-11,Chennai,Electronics,2899,11837704
+2025-11,Chennai,Apparel,4020,5745198
+2025-11,Chennai,Groceries,6243,3748885
+2025-11,Chennai,Home & Kitchen,2089,3883271
+2025-11,Kolkata,Electronics,2465,9865080
+2025-11,Kolkata,Apparel,3598,5125222
+2025-11,Kolkata,Groceries,5518,3407953
+2025-11,Kolkata,Home & Kitchen,1789,3281923
+2025-11,Pune,Electronics,2884,12145217
+2025-11,Pune,Apparel,4285,6186902
+2025-11,Pune,Groceries,6071,3891307
+2025-11,Pune,Home & Kitchen,2068,4088343
+2025-11,Ahmedabad,Electronics,2009,8179494
+2025-11,Ahmedabad,Apparel,2953,4369574
+2025-11,Ahmedabad,Groceries,4359,2770635
+2025-11,Ahmedabad,Home & Kitchen,1413,2727571
+2025-12,Mumbai,Electronics,2593,10758303
+2025-12,Mumbai,Apparel,3644,5390234
+2025-12,Mumbai,Groceries,7135,4256908
+2025-12,Mumbai,Home & Kitchen,2386,4697435
+2025-12,Delhi,Electronics,2650,10853512
+2025-12,Delhi,Apparel,3964,5728834
+2025-12,Delhi,Groceries,7724,4738917
+2025-12,Delhi,Home & Kitchen,2297,4213560
+2025-12,Bengaluru,Electronics,2948,11803303
+2025-12,Bengaluru,Apparel,4314,6352085
+2025-12,Bengaluru,Groceries,8538,5096341
+2025-12,Bengaluru,Home & Kitchen,2526,4714767
+2025-12,Hyderabad,Electronics,1980,8191286
+2025-12,Hyderabad,Apparel,3123,4596730
+2025-12,Hyderabad,Groceries,5684,3609681
+2025-12,Hyderabad,Home & Kitchen,1877,3583294
+2025-12,Chennai,Electronics,1632,6941494
+2025-12,Chennai,Apparel,2572,3694270
+2025-12,Chennai,Groceries,5386,3480710
+2025-12,Chennai,Home & Kitchen,1405,2590968
+2025-12,Kolkata,Electronics,1565,6753660
+2025-12,Kolkata,Apparel,2274,3137760
+2025-12,Kolkata,Groceries,4713,3058867
+2025-12,Kolkata,Home & Kitchen,1394,2752217
+2025-12,Pune,Electronics,1890,7734257
+2025-12,Pune,Apparel,2848,4230354
+2025-12,Pune,Groceries,5556,3399904
+2025-12,Pune,Home & Kitchen,1623,2979041
+2025-12,Ahmedabad,Electronics,1349,5882738
+2025-12,Ahmedabad,Apparel,1745,2438079
+2025-12,Ahmedabad,Groceries,3572,2227739
+2025-12,Ahmedabad,Home & Kitchen,1043,1989757
