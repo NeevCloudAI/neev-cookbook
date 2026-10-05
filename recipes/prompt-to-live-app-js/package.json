@@ -1,0 +1,20 @@
+{
+  "name": "prompt-to-live-app",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "tsx app-builder.ts",
+    "test": "node --import tsx --test test/*.test.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.32.1",
+    "@neevcloud/sdk": "^0.8.2",
+    "openai": "^6.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "tsx": "^4.19.0",
+    "typescript": "^5.6.0"
+  }
+}
