@@ -1,28 +1,29 @@
 # NeevCloud Cookbook
 
-Working examples for running AI agents on [NeevCloud](https://neevcloud.com)
-sandboxes — real Linux machines your agent can drive, isolated from everything
-else and from each other.
+Recipes for building AI agents you can trust with a real computer. Every recipe runs on [NeevCloud](https://neevcloud.com) sandboxes, isolated Linux machines with an MCP server, a command audit trail, network egress you control, and memory snapshots you can roll back, plus NeevCloud's own models.
 
-Each example runs as written. Set your API key and go.
+Each recipe runs as written: two API keys, one install, one command.
 
-## Examples
+## Recipes
 
-### Python
+| Recipe | What you get | Python | TypeScript |
+| --- | --- | --- | --- |
+| **Prompt to live app** | Describe an app; an agent builds it in a sandbox and returns a public URL | [Python](recipes/prompt-to-live-app-python) | [TypeScript](recipes/prompt-to-live-app-js) |
+
+![A todo app built by the agent](assets/prompt-to-live-app.png)
+
+## Integrations
+
+Use NeevCloud sandboxes from the agent framework you already have.
 
 | Example | What it shows |
 | --- | --- |
 | [hello-world-python](examples/hello-world-python) | Create a sandbox, run a command, delete it |
+| [hello-world-js](examples/hello-world-js) | Create a sandbox, run a command, delete it |
 | [langchain-python](examples/langchain-python) | A LangChain agent with sandbox-backed tools |
 | [langgraph-python](examples/langgraph-python) | A two-agent LangGraph crew, a sandbox each, over one MCP URL |
 | [crewai-python](examples/crewai-python) | Replace CrewAI's removed code execution with a sandbox tool |
 | [openai-agents-sdk-python](examples/openai-agents-sdk-python) | An OpenAI Agents SDK agent with a sandbox tool |
-
-### JavaScript
-
-| Example | What it shows |
-| --- | --- |
-| [hello-world-js](examples/hello-world-js) | Create a sandbox, run a command, delete it |
 | [vercel-ai-sdk-js](examples/vercel-ai-sdk-js) | A Vercel AI SDK agent with a sandbox tool |
 
 ## Connecting
@@ -68,6 +69,8 @@ curl https://inference.ai.neevcloud.com/v1/chat/completions \
   -H "Authorization: Bearer $NEEV_MODEL_API_KEY" \
   -d '{"model": "glm-5-2", "messages": [{"role": "user", "content": "hello"}]}'
 ```
+
+Use an API key with Resource Type **Model API**. A Sandboxes key is not accepted by the model endpoint.
 
 Available models: `glm-5-2`, `glm-4-7`, `deepseek-v3-2`, `kimi-k3`, `minimax-m3`,
 `minimax-m2.7`, `minimax-m2.7-highspeed`, `gpt-oss-120b`, `gpt-oss-20b`,
