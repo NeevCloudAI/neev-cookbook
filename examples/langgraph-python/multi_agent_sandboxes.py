@@ -20,7 +20,7 @@ NEEV_API_KEY = os.environ["NEEV_API_KEY"]
 
 MODEL_BASE_URL = os.environ["NEEV_MODEL_BASE_URL"]
 MODEL_API_KEY = os.environ["NEEV_MODEL_API_KEY"]
-MODEL_NAME = os.environ.get("NEEV_MODEL", "glm-5-2")
+MODEL_NAME = os.environ.get("NEEV_MODEL", "glm-4-7")
 
 # One sandbox per agent. Reuse a name to give two agents a shared filesystem.
 RESEARCHER_SANDBOX = "crew-researcher"
@@ -103,7 +103,7 @@ async def researcher(state: CrewState) -> dict:
                 (
                     "user",
                     f"Write a file notes.txt containing exactly '{MARKER}'. "
-                    "Then report the kernel version from uname -sr. "
+                    "Then report the operating system and architecture from uname -sm. "
                     "Reply with the kernel string only.",
                 )
             ]

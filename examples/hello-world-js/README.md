@@ -15,8 +15,8 @@ npm start
 Output:
 
 ```
-sandbox 01a0ce3e-3647-7b74-95a5-71306fad29c8 is Ready
-Linux 4.19.0-gvisor
+sandbox 01a1103d-a841-76f9-8841-19bd40a30336 is Ready
+Linux x86_64
 hello from inside
 deleted
 ```

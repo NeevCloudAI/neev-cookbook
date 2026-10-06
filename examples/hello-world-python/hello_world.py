@@ -13,7 +13,7 @@ try:
     sandbox.wait_until_ready()
     print(f"sandbox {sandbox.id} is {sandbox.phase}")
 
-    result = sandbox.exec("sh", args=["-lc", "uname -sr && echo hello from inside"])
+    result = sandbox.exec("sh", args=["-lc", "uname -sm && echo hello from inside"])
     print(result.stdout.strip())
 finally:
     sandbox.delete()
