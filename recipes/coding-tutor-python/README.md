@@ -51,7 +51,7 @@ export NEEV_API_KEY=... NEEV_MODEL_API_KEY=... NEEV_ORG_ID=... NEEV_PROJECT_ID=.
 python coding_tutor.py
 ```
 
-On Windows, use the PowerShell setup in [Setting up a recipe](../../README.md#setting-up-a-recipe) for the virtualenv and the keys.
+On Windows, see the [setup guide](../../docs/setup.md#windows) for the PowerShell commands.
 
 The run needs no input and exits 0 only when the preview URL answered, the tutor gave hints without changing the student's files, and the files, the server and the preview URL all came back after the pause and resume.
 

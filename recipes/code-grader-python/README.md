@@ -37,7 +37,7 @@ export NEEV_API_KEY=... NEEV_ORG_ID=... NEEV_PROJECT_ID=...
 python grader.py              # add --feedback (and NEEV_MODEL_API_KEY) for a hint per failing submission
 ```
 
-On Windows, use the PowerShell setup in [Setting up a recipe](../../README.md#setting-up-a-recipe) for the virtualenv and the keys.
+On Windows, see the [setup guide](../../docs/setup.md#windows) for the PowerShell commands.
 
 The grades go to `results.json` (change it with `--out`). The script exits 0 only when every submission was graded, every grade matches the answer key in `expected.json`, and every sandbox was deleted.
 

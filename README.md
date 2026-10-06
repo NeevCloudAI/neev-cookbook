@@ -6,49 +6,16 @@ Each recipe runs as written: one install, one command, and one or two API keys. 
 
 ## Prerequisites
 
-- **A NeevCloud account** with two API keys from **Account > API Keys** in the console ([how to create one](https://docs.ai.neevcloud.com/getting-started/create-api-key)): one with Resource Type **Sandboxes** (`NEEV_API_KEY`) and one with Resource Type **Model API** (`NEEV_MODEL_API_KEY`), plus your [organization and project IDs](https://docs.ai.neevcloud.com/getting-started/org-and-project) (`NEEV_ORG_ID`, `NEEV_PROJECT_ID`).
-- **Python 3.11 or later** for the Python recipes and examples.
-- **Node 20.3 or later** for the TypeScript recipes and examples, from [nodejs.org](https://nodejs.org/en/download) on any system.
-- **Git**, to clone the repository.
+- Two NeevCloud API keys, one **Sandboxes** and one **Model API** ([create a key](https://docs.ai.neevcloud.com/getting-started/create-api-key))
+- Your [organization and project IDs](https://docs.ai.neevcloud.com/getting-started/org-and-project)
+- Python 3.11+ for Python recipes, or Node 20.3+ for TypeScript recipes
+- Git
 
-### Installing Python
-
-Check what you have with `python3 --version` (on Windows, `py --version`). If it is older than 3.11, install Python 3.12:
-
-- **macOS**: the installer from [python.org](https://www.python.org/downloads/macos/). The Python built into macOS is too old.
-- **Linux**: Ubuntu 24.04 and later already have it; add the venv module with `sudo apt install python3.12-venv`. On Fedora, `sudo dnf install python3.12`. Older distributions that ship Python 3.11 work too: use `python3.11` wherever the commands below say `python3.12`.
-- **Windows**: the installer from [python.org](https://www.python.org/downloads/windows/), or `winget install Python.Python.3.12`.
-
-### Setting up a recipe
-
-Each recipe installs its packages into its own virtualenv in its folder, so they never mix with your system Python. Once the virtualenv is active, `python` and `pip` are the virtualenv's own on every system.
-
-macOS and Linux:
-
-```bash
-python3.12 -m venv .venv
-source .venv/bin/activate
-pip install -r requirements.txt
-export NEEV_API_KEY=... NEEV_MODEL_API_KEY=... NEEV_ORG_ID=... NEEV_PROJECT_ID=...
-```
-
-Windows (PowerShell):
-
-```powershell
-py -3.12 -m venv .venv
-.venv\Scripts\Activate.ps1
-pip install -r requirements.txt
-$env:NEEV_API_KEY = "..."; $env:NEEV_MODEL_API_KEY = "..."; $env:NEEV_ORG_ID = "..."; $env:NEEV_PROJECT_ID = "..."
-```
-
-If PowerShell refuses to run `Activate.ps1`, allow local scripts once with `Set-ExecutionPolicy -Scope CurrentUser RemoteSigned`. TypeScript recipes need no virtualenv: run `npm install` in the recipe's folder instead.
-
-The recipe READMEs show the macOS and Linux commands. On Windows, use the PowerShell lines above for the setup and the keys, then run the recipe's own command as written.
+New to this, or on Windows? The [setup guide](docs/setup.md) covers installing Python and Node, the commands for each system, and common errors.
 
 ## Quickstart
 
-1. Create the two API keys and note the IDs listed under [Prerequisites](#prerequisites).
-2. Run the flagship recipe (on Windows, swap in the PowerShell setup above):
+On macOS or Linux ([Windows commands](docs/setup.md#windows)):
 
 ```bash
 git clone https://github.com/NeevCloudAI/neev-cookbook.git
@@ -61,8 +28,6 @@ python app_builder.py "a pomodoro timer with a calm green theme"
 ```
 
 In about a minute you get a public URL to an app an agent built inside a sandbox. Every recipe works the same way: its README lists what it needs, and it deletes everything it creates when it ends.
-
-If `pip install` fails with `No matching distribution found for neevai`, pip is running on a Python older than 3.10, such as the one built into macOS. Set up the virtualenv with Python 3.11 or later, as above, and install again inside it.
 
 <p align="center">
   <img src="assets/prompt-to-live-app.png" alt="The pomodoro timer the agent built from the quickstart command, open on its public preview URL" width="560">
@@ -220,6 +185,7 @@ The [Sandbox docs](https://docs.ai.neevcloud.com/agentic-studio/overview) cover 
 ```
 recipes/      one folder per recipe, each self-contained with its own README and tests
 examples/     framework integrations and short single-feature examples
+docs/         the setup guide for macOS, Linux and Windows
 assets/       screenshots used by the READMEs
 .github/      issue and pull request templates, and the nightly check that runs every recipe
 ```

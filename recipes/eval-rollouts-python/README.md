@@ -55,7 +55,7 @@ export NEEV_API_KEY=... NEEV_MODEL_API_KEY=... NEEV_ORG_ID=... NEEV_PROJECT_ID=.
 python eval_rollouts.py
 ```
 
-On Windows, use the PowerShell setup in [Setting up a recipe](../../README.md#setting-up-a-recipe) for the virtualenv and the keys.
+On Windows, see the [setup guide](../../docs/setup.md#windows) for the PowerShell commands.
 
 It compares `glm-4-7` and `minimax-m3`, both served by NeevCloud. Pick other models with `--models`, for example `--models glm-4-7,glm-5-2`, and another results file with `--out`. The script exits 0 when every rollout ran and was graded (a fail is a result, not an error) and everything it created was deleted.
 

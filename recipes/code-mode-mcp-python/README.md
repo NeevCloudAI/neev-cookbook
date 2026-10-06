@@ -20,7 +20,7 @@ export NEEV_API_KEY=... NEEV_MODEL_API_KEY=... NEEV_ORG_ID=... NEEV_PROJECT_ID=.
 python code_mode.py
 ```
 
-On Windows, use the PowerShell setup in [Setting up a recipe](../../README.md#setting-up-a-recipe) for the virtualenv and the keys.
+On Windows, see the [setup guide](../../docs/setup.md#windows) for the PowerShell commands.
 
 Add `--show-code` to print the programs the model wrote, and `--seed N` to generate the same logs again. The script exits `0` only when code mode gave the right answer; the tool-calling result is reported either way.
 

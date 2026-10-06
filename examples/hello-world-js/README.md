@@ -12,7 +12,7 @@ export NEEV_PROJECT_ID=...
 npm start
 ```
 
-On Windows, set the keys with the PowerShell lines in [Setting up a recipe](../../README.md#setting-up-a-recipe).
+On Windows, see the [setup guide](../../docs/setup.md#windows) for the PowerShell commands.
 
 Output:
 

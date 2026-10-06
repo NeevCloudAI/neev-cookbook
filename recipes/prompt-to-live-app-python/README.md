@@ -24,7 +24,7 @@ export NEEV_API_KEY=... NEEV_MODEL_API_KEY=... NEEV_ORG_ID=... NEEV_PROJECT_ID=.
 python app_builder.py "a pomodoro timer with a calm green theme"
 ```
 
-On Windows, use the PowerShell setup in [Setting up a recipe](../../README.md#setting-up-a-recipe) for the virtualenv and the keys.
+On Windows, see the [setup guide](../../docs/setup.md#windows) for the PowerShell commands.
 
 The app stays online for 10 minutes (`--keep 0` to stop as soon as it is up). Press `Ctrl+C` to stop sooner.
 

@@ -44,7 +44,7 @@ export NEEV_API_KEY=... NEEV_ORG_ID=... NEEV_PROJECT_ID=...
 python evidence_pack.py --demo
 ```
 
-On Windows, use the PowerShell setup in [Setting up a recipe](../../README.md#setting-up-a-recipe) for the virtualenv and the keys.
+On Windows, see the [setup guide](../../docs/setup.md#windows) for the PowerShell commands.
 
 `--demo` creates two short-lived sandboxes, does some representative work in them, exports the pack, and deletes the sandboxes. To export your own sandboxes instead, name them:
 

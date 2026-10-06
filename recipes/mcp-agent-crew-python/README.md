@@ -21,7 +21,7 @@ export NEEV_API_KEY=... NEEV_MODEL_API_KEY=... NEEV_ORG_ID=... NEEV_PROJECT_ID=.
 python crew.py
 ```
 
-On Windows, use the PowerShell setup in [Setting up a recipe](../../README.md#setting-up-a-recipe) for the virtualenv and the keys.
+On Windows, see the [setup guide](../../docs/setup.md#windows) for the PowerShell commands.
 
 By default the crew builds a `slugify(text)` function. Pass your own small task as an argument, for example `python crew.py "a function that converts Roman numerals to integers"`.
 

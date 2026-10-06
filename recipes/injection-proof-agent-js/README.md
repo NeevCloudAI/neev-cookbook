@@ -21,7 +21,7 @@ export NEEV_API_KEY=... NEEV_MODEL_API_KEY=... NEEV_ORG_ID=... NEEV_PROJECT_ID=.
 npm start
 ```
 
-On Windows, set the keys with the PowerShell lines in [Setting up a recipe](../../README.md#setting-up-a-recipe).
+On Windows, see the [setup guide](../../docs/setup.md#windows) for the PowerShell commands.
 
 The secrets in the fixture are dummy values written at runtime, and the paste host is never on the
 allow-list, so nothing real is ever sent anywhere. The script exits `0` only when the paste upload failed
