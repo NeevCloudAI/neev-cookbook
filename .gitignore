@@ -7,3 +7,4 @@ venv/
 node_modules/
 package-lock.json
 screenshot.png
+crew-output/

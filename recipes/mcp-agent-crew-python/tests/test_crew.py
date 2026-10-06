@@ -31,7 +31,7 @@ def run(model, keys=SHARED, client=None, exec_result=PASSED, lines=None, **kw):
     client = client or FakeClient(caller="cred-ks")
     connect = kw.pop("connect", None) or connector(client, {"tester": exec_result})
     log = lines.append if lines is not None else (lambda *_: None)
-    code = crew.run("a slugify function", client, model, "m", connect, keys, "ks", log=log, sleep=lambda s: None)
+    code = crew.run("a slugify function", client, model, "m", connect, keys, "ks", log=log, sleep=lambda s: None, **kw)
     return code, client, connect
 
 
@@ -297,3 +297,21 @@ def test_a_tester_that_rewrites_the_tests_it_judges_fails():
     code, _, _ = run(crew_model(), client=client, connect=tampering, lines=lines)
     assert code == 1
     assert any("test_solution.py changed in the tester's sandbox" in l for l in lines)
+
+
+def test_a_passing_crew_saves_the_plan_code_and_tests_it_built(tmp_path):
+    lines = []
+    code, client, _ = run(crew_model(), lines=lines, out=tmp_path)
+    assert code == 0
+    [folder] = list(tmp_path.iterdir())
+    assert folder.name == client.created[0]["name"].rsplit("-", 1)[1]  # the run's id, shared by its sandboxes
+    tester = client.sandbox("crew-tester")
+    assert {f.name: f.read_text() for f in folder.iterdir()} == {
+        name: tester.files_store[name] for name in ("PLAN.md", "solution.py", "test_solution.py")}
+    assert any(str(folder) in l for l in lines)
+
+
+def test_a_failing_crew_saves_nothing(tmp_path):
+    code, _, _ = run(crew_model(passed=False), out=tmp_path)
+    assert code == 1
+    assert list(tmp_path.iterdir()) == []
