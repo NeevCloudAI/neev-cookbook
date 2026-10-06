@@ -2,6 +2,10 @@
 
 Hand an AI agent a repository with a failing test. It fixes the code in an isolated NeevCloud sandbox, and you get back a `fix.patch` that the script has proven: the tests pass, the test files are untouched, and the patch applies cleanly. The script only reads your repository; applying the patch is up to you.
 
+<p align="center">
+  <img src="../../assets/runs/fix-failing-test-python.gif" alt="A real run of this recipe, recorded in a terminal" width="720">
+</p>
+
 ```text
 3. Running the tests: python3 -m unittest
    | AssertionError: 67260 != 63720

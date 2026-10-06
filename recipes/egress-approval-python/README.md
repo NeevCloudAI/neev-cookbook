@@ -4,6 +4,10 @@ An agent starts with no internet. When its task needs a host, it asks for it, yo
 the terminal, and an approved host is added to the running sandbox's allow-list on the spot, with no
 restart. A denied request goes back to the agent as a refusal, and the host is never added.
 
+<p align="center">
+  <img src="../../assets/runs/egress-approval-python.gif" alt="A real run of this recipe, recorded in a terminal" width="720">
+</p>
+
 ## What you need
 
 - Python 3.11 or later

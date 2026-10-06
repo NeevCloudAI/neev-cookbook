@@ -2,6 +2,10 @@
 
 An agent asked to run a database migration has no way to take it back once rows are gone. Give it the sandbox MCP server's snapshot tools and one rule, and it snapshots before the risky step, sees the tests fail, and rolls itself back.
 
+<p align="center">
+  <img src="../../assets/runs/mcp-agent-undo-python.gif" alt="A real run of this recipe, recorded in a terminal" width="720">
+</p>
+
 ```text
 3. Asking glm-4-7 over MCP to apply migrations/002_customer_email.sql...
    step 1: create_snapshot before-migration -> snapshot 01a10d04 Pending

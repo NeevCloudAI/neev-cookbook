@@ -2,6 +2,10 @@
 
 An agent just worked inside your sandbox. This recipe answers what it actually did, from the sandbox's own audit trail rather than from the agent's word.
 
+<p align="center">
+  <img src="../../assets/runs/agent-session-report-python.gif" alt="A real run of this recipe, recorded in a terminal" width="720">
+</p>
+
 ```text
 Session report for session-report-3aee4d40: 13 records, 8 from the agent
 

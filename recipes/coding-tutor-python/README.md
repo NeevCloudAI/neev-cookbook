@@ -2,6 +2,10 @@
 
 Give each student one sandbox that they and an AI tutor share across sessions: the student works in it over SSH and sees their app on a preview URL, the tutor reads their work and gives hints without rewriting it, and between sessions the box is paused with everything kept.
 
+<p align="center">
+  <img src="../../assets/runs/coding-tutor-python.gif" alt="A real run of this recipe, recorded in a terminal" width="720">
+</p>
+
 ```text
 3. Session 1: the student opens an SSH tunnel and saves their attempt
    ssh -p 64614 -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR root@127.0.0.1 'cat > app.py'

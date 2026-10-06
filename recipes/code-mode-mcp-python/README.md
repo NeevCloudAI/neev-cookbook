@@ -2,6 +2,10 @@
 
 An agent that answers a question about 200 log files by reading them one tool call at a time is slow, expensive, and loses count. Give it one tool that runs a Python program next to the data instead, and it writes a short script that does the work. This recipe runs both on the same question and the same files in a NeevCloud sandbox, checks both answers, and prints the cost side by side.
 
+<p align="center">
+  <img src="../../assets/runs/code-mode-mcp-python.gif" alt="A real run of this recipe, recorded in a terminal" width="720">
+</p>
+
 ## What you need
 
 - Python 3.11 or later

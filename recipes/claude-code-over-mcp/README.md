@@ -4,6 +4,10 @@ Give your coding agent a disposable Linux machine over MCP, so it writes code, i
 
 There is nothing to install for the agent side: one URL, one API key and one header. This folder adds two scripts: `verify.py` prints the sandbox's audit trail, and `simulate_agent.py` plays the coding agent so you can try the whole thing without one.
 
+<p align="center">
+  <img src="../../assets/runs/claude-code-over-mcp.gif" alt="A real run of this recipe, recorded in a terminal" width="720">
+</p>
+
 ## What you need
 
 - A NeevCloud account with a project [API key](https://docs.ai.neevcloud.com/getting-started/create-api-key) created with Resource Type **Sandboxes** (`NEEV_API_KEY`)

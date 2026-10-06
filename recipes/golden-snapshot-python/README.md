@@ -2,6 +2,10 @@
 
 Every new sandbox repeats the same slow setup: install packages, build a dataset, start and warm a service. Do it once, take a memory snapshot, and start every worker from that snapshot with the packages installed, the files in place and the service already running with its model in memory.
 
+<p align="center">
+  <img src="../../assets/runs/golden-snapshot-python.gif" alt="A real run of this recipe, recorded in a terminal" width="720">
+</p>
+
 ```text
 2. Cold setup, the work every worker would otherwise repeat...
    installed pandas, scikit-learn into /workspace/.venv in 32.0s

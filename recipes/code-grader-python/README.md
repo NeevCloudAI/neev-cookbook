@@ -2,6 +2,10 @@
 
 Grade a pile of untrusted student or candidate submissions in parallel, each in its own sandbox with no internet access, so a submission that loops forever, peeks at the hidden tests or tries to phone home cannot affect the grader, the other submissions or your network.
 
+<p align="center">
+  <img src="../../assets/runs/code-grader-python.gif" alt="A real run of this recipe, recorded in a terminal" width="720">
+</p>
+
 ```text
 1. Grading 6 submissions, each in its own sandbox with no internet access, at most 3 at a time...
    correct.py        100/100  passed     4.5s

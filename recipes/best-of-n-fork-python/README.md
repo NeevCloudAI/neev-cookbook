@@ -2,6 +2,10 @@
 
 One AI attempt at a bug fix is a coin toss. Fork a sandbox three times, let three agents try different approaches in parallel, and keep the first fix that actually passes the tests.
 
+<p align="center">
+  <img src="../../assets/runs/best-of-n-fork-python.gif" alt="A real run of this recipe, recorded in a terminal" width="720">
+</p>
+
 ```text
 3. Forking best-of-n-35081b7f 3 times...
    3 forks ready in 8.1s, each with the same files

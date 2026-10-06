@@ -2,6 +2,10 @@
 
 To compare models (or prompts, or agent versions) on a set of tasks, every rollout has to start from exactly the same environment, and nothing one rollout does may reach the next. This recipe builds a golden sandbox once, with task files and a service running with its state in memory, takes a memory snapshot, and runs every task for every model in a new sandbox created from that snapshot. Each rollout is graded by a deterministic checker and deleted.
 
+<p align="center">
+  <img src="../../assets/runs/eval-rollouts-python.gif" alt="A real run of this recipe, recorded in a terminal" width="720">
+</p>
+
 ```text
 3. Taking a memory snapshot of the golden (files, memory and running processes)...
    snapshot 01a10ffd-aad2-7668-8fef-b5227e0a7e0b Ready in 1.3s

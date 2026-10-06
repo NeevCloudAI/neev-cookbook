@@ -2,6 +2,10 @@
 
 Your auditor asks what your agents did in production last month, and under which credentials. This recipe exports the sandboxes' own audit trails for a time window into a pack you can hand over: every recorded operation as CSV, a per-credential summary, and a SHA-256 manifest that shows if any file was changed afterwards.
 
+<p align="center">
+  <img src="../../assets/runs/audit-evidence-pack-python.gif" alt="A real run of this recipe, recorded in a terminal" width="720">
+</p>
+
 ```text
 1. Creating two sandboxes with no internet access: evidence-sdk-dd3b4abd, evidence-mcp-dd3b4abd
 2. Working in evidence-sdk-dd3b4abd through the SDK:

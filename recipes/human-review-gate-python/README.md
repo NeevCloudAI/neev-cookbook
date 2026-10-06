@@ -2,6 +2,10 @@
 
 An agent changed your code. Before you accept it, see two things side by side: the diff of what it changed, and the sandbox's audit trail of what it did to get there. Approve, and the changed files are copied out. Reject, and the change is deleted with the sandbox.
 
+<p align="center">
+  <img src="../../assets/runs/human-review-gate-python.gif" alt="A real run of this recipe, recorded in a terminal" width="720">
+</p>
+
 ```text
 Changed files (3):
   modified  config.py                    +5 -4

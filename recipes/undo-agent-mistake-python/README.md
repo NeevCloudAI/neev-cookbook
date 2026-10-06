@@ -2,6 +2,10 @@
 
 An agent told to "clean up the workspace" deletes your data while your app is running. Take a memory snapshot first, and one rollback brings back the files, the running server and even what it held in memory.
 
+<p align="center">
+  <img src="../../assets/runs/undo-agent-mistake-python.gif" alt="A real run of this recipe, recorded in a terminal" width="720">
+</p>
+
 ```text
 4. Asking glm-4-7 to: "Clean up the workspace to save space."
    step 1: fs_list /workspace
