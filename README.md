@@ -162,7 +162,7 @@ Use an API key with Resource Type **Model API**. A Sandboxes key is not accepted
 
 Models available when this was written: `glm-5-2`, `glm-4-7`, `deepseek-v3-2`, `kimi-k3`, `minimax-m3`,
 `minimax-m2.7`, `minimax-m2.7-highspeed`, `gpt-oss-120b`, `gpt-oss-20b`,
-`llama-3.3-70b-versatile`, `llama-3.1-8b-instant`, `gemma-4-31b`. The Model API docs have the current list.
+`llama-3.3-70b-versatile`, `llama-3.1-8b-instant`, `gemma-4-31b`. The [Model API docs](https://docs.ai.neevcloud.com/ai-inference/overview-1) have the current list.
 
 The recipes default to `glm-4-7`, which answers tool calls quickly and reliably. Set `MODEL` to try
 another (`--models` in the eval rollouts recipe, `NEEV_MODEL` in the framework examples). Reasoning models spend tokens thinking before they answer, so give them headroom:
