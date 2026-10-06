@@ -23,7 +23,9 @@ class FakeSandbox:
         self.server_survives = server_survives
         self.tunnels = []
         self.files = SimpleNamespace(write=self._write, read_text=self._read)
-        self.processes = SimpleNamespace(start=self._start, get=self._get)
+        self.processes = SimpleNamespace(start=self._start, get=self._get, kill=self._kill)
+        self.start_count = 0
+        self.killed = []
 
     def wait_until_ready(self, timeout_ms=None):
         return self
@@ -39,8 +41,14 @@ class FakeSandbox:
 
     def _start(self, program, **kw):
         self.started = program
+        self.start_count += 1
         self.server, self.process_state = self.workspace.get("app.py"), "running"
-        return SimpleNamespace(id="proc-1", state="running")
+        return SimpleNamespace(id=f"proc-{self.start_count}", state="running")
+
+    def _kill(self, process_id, signal=None):
+        self.killed.append(process_id)
+        self.server, self.process_state = None, "exited"
+        return True
 
     def _get(self, process_id):
         return SimpleNamespace(process_id=process_id, state=self.process_state or "exited")
