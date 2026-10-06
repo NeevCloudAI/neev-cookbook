@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import argparse
+import difflib
 import json
 import os
 import re
@@ -225,7 +226,20 @@ def wait_for_status(agent, status: str, sleep, clock) -> None:
         sleep(2)
 
 
-def demo(agent, model: str, model_key: str, log, sleep, clock) -> bool:
+def show_fix(machine, out: Path | None, log) -> None:
+    """Prints OpenCode's change to slugify.js as a diff and, with `out`, saves the fixed file there."""
+    original = (PROJECT_DIR / "slugify.js").read_text()
+    fixed = machine.files.read_text("slugify.js")
+    log("   OpenCode's change:")
+    for line in difflib.unified_diff(original.splitlines(), fixed.splitlines(), "a/slugify.js", "b/slugify.js", lineterm=""):
+        log(f"   {line}")
+    if out is not None:
+        out.mkdir(parents=True, exist_ok=True)
+        (out / "slugify.js").write_text(fixed)
+        log(f"   Saved the fixed file to {out / 'slugify.js'}")
+
+
+def demo(agent, model: str, model_key: str, log, sleep, clock, out: Path | None = None) -> bool:
     """Has the agent fix the tests, verifies, audits, then pauses and resumes it; True only if every check passed."""
     machine = agent.sandbox()
     log("2. Uploading a small project whose tests fail...")
@@ -243,6 +257,8 @@ def demo(agent, model: str, model_key: str, log, sleep, clock) -> bool:
 
     log("4. Checking the agent's work ourselves...")
     fixed = verify(machine, (PROJECT_DIR / "slugify.test.js").read_text(), log)
+    if fixed:
+        show_fix(machine, out, log)
 
     log("5. Audit trail: every call this script made into the agent, oldest first")
     show_trail(read_trail(agent, sleep, clock, execs=2), log)  # the two test runs above
@@ -271,7 +287,8 @@ def demo(agent, model: str, model_key: str, log, sleep, clock) -> bool:
     return True
 
 
-def run(client, model: str, model_key: str, log=print, sleep=time.sleep, clock=time.monotonic) -> int:
+def run(client, model: str, model_key: str, log=print, sleep=time.sleep, clock=time.monotonic,
+        out: Path | None = None) -> int:
     """Creates the agent, runs the demo on it, and always deletes it; returns 0 only when every check passed."""
     agent, code = None, 1
     try:
@@ -282,7 +299,7 @@ def run(client, model: str, model_key: str, log=print, sleep=time.sleep, clock=t
                                       "idle_timeout_seconds": 600}, allow_egress=[MODEL_HOST])
         agent.wait_until_ready(timeout_ms=300_000)
         log(f"   {agent.name} Ready in {clock() - started:.0f}s")
-        code = 0 if demo(agent, model, model_key, log, sleep, clock) else 1
+        code = 0 if demo(agent, model, model_key, log, sleep, clock, out) else 1
     except KeyboardInterrupt:
         code = 130
     except Exception as e:  # e.g. a rejected key or quota: one line instead of a traceback
@@ -300,7 +317,10 @@ def run(client, model: str, model_key: str, log=print, sleep=time.sleep, clock=t
 
 def main(argv=None) -> int:
     """Parses arguments, checks the environment, and runs the recipe."""
-    argparse.ArgumentParser(description=__doc__).parse_args(argv)
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--out", type=Path, default=Path("hosted-agent-output"),
+                        help="where the fixed slugify.js is saved once verified (default hosted-agent-output/)")
+    args = parser.parse_args(argv)
     missing = missing_env(os.environ)
     if missing:
         print(f"Missing environment variables: {', '.join(missing)}. See README.md.", file=sys.stderr)
@@ -308,7 +328,7 @@ def main(argv=None) -> int:
     from neevai import NeevAI
 
     with NeevAI() as client:
-        return run(client, os.environ.get("MODEL", DEFAULT_MODEL), os.environ["NEEV_MODEL_API_KEY"])
+        return run(client, os.environ.get("MODEL", DEFAULT_MODEL), os.environ["NEEV_MODEL_API_KEY"], out=args.out)
 
 
 if __name__ == "__main__":

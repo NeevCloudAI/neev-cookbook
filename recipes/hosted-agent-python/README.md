@@ -26,7 +26,7 @@ The script exits 0 only when the test file is unchanged, the tests pass after th
 
 1. **Agent.** `client.agents.create(...)` starts an agent from the `opencode` template, with internet access narrowed to the NeevCloud model API. It is ready in about 9 seconds.
 2. **Task.** The script uploads a small JavaScript project whose tests fail, plus an OpenCode config that points at NeevCloud models, and starts OpenCode with the task. The model key is passed only in that process's environment, never written to a file.
-3. **Verify.** The script doesn't trust "All tests pass". It checks the test file is unchanged and runs the tests itself.
+3. **Verify.** The script doesn't trust "All tests pass". It checks the test file is unchanged and runs the tests itself. Once the fix is verified, it prints OpenCode's change as a diff and saves the fixed `slugify.js` to `hosted-agent-output/` (change it with `--out`).
 4. **Audit.** `agent.audit()` lists every call the script made into the agent, with the program name but never its arguments.
 5. **Pause and resume.** The script starts a long-running process, pauses the agent, resumes it, and checks the process is still running: the agent kept its work, without a restart.
 

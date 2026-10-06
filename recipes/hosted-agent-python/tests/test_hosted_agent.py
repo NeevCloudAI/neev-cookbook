@@ -207,3 +207,17 @@ def test_line_buffer_holds_partial_lines_and_strips_colours():
 def test_collapse_merges_consecutive_rows_that_differ_only_in_time():
     rows = [("07:00:01", "a"), ("07:00:02", "a"), ("07:00:03", "b"), ("07:00:04", "a")]
     assert hosted_agent.collapse(rows) == [(("07:00:01", "a"), 2), (("07:00:03", "b"), 1), (("07:00:04", "a"), 1)]
+
+
+def test_a_verified_fix_is_shown_as_a_diff_and_saved(tmp_path):
+    lines = []
+    assert run(lines=lines, out=tmp_path) == 0
+    assert (tmp_path / "slugify.js").read_text() == "// fixed\n"
+    out = "\n".join(lines)
+    assert "--- a/slugify.js" in out and "+// fixed" in out
+    assert str(tmp_path / "slugify.js") in out
+
+
+def test_no_fix_means_nothing_is_saved(tmp_path):
+    assert run(FakeAgent(FakeMachine(effect="nothing")), out=tmp_path) == 1
+    assert list(tmp_path.iterdir()) == []
