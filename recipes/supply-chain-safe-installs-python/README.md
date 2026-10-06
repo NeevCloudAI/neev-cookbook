@@ -22,7 +22,7 @@ export NEEV_API_KEY=... NEEV_ORG_ID=... NEEV_PROJECT_ID=...
 python safe_install.py            # or: python safe_install.py <a-different-pypi-package>
 ```
 
-On Windows, use the PowerShell setup in [Setting up a recipe](../../README.md#setting-up-a-recipe) for the virtualenv and the keys.
+On Windows, see the [setup guide](../../docs/setup.md#windows) for the PowerShell commands.
 
 The secret in the fixture is a dummy value written at runtime, and the collector host is never on the
 allow-list, so nothing real is ever sent anywhere. The script exits `0` only when the install-time

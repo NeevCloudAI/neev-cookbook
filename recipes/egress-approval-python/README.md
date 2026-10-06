@@ -22,7 +22,7 @@ export NEEV_API_KEY=... NEEV_MODEL_API_KEY=... NEEV_ORG_ID=... NEEV_PROJECT_ID=.
 python egress_approval.py
 ```
 
-On Windows, use the PowerShell setup in [Setting up a recipe](../../README.md#setting-up-a-recipe) for the virtualenv and the keys.
+On Windows, see the [setup guide](../../docs/setup.md#windows) for the PowerShell commands.
 
 The default task needs two hosts: `api.github.com` for a repository's latest release and `pypi.org` to
 compare the version. Approve one and deny the other to see both paths. Pass your own task as an argument,

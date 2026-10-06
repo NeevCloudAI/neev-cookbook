@@ -24,7 +24,7 @@ export NEEV_API_KEY=... NEEV_MODEL_API_KEY=... NEEV_ORG_ID=... NEEV_PROJECT_ID=.
 python report.py
 ```
 
-On Windows, use the PowerShell setup in [Setting up a recipe](../../README.md#setting-up-a-recipe) for the virtualenv and the keys.
+On Windows, see the [setup guide](../../docs/setup.md#windows) for the PowerShell commands.
 
 With no arguments it reports on the bundled sample, `data/expenses.csv`: 360 rows of synthetic 2025 monthly budget and actual spend for six departments and five cost categories, with a few made-up overruns to find. `report.pdf` and `report.xlsx` are saved in the current directory and the key findings are printed.
 

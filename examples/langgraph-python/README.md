@@ -31,7 +31,7 @@ export NEEV_MODEL_API_KEY=...
 python multi_agent_sandboxes.py
 ```
 
-On Windows, use the PowerShell setup in [Setting up a recipe](../../README.md#setting-up-a-recipe) for the virtualenv and the keys.
+On Windows, see the [setup guide](../../docs/setup.md#windows) for the PowerShell commands.
 
 Optional: `NEEV_REGION` (defaults to `as-south-1`) and `NEEV_MODEL` (defaults to `glm-4-7`).
 

@@ -38,7 +38,7 @@ export NEEV_MODEL_API_KEY=...
 python sandboxed_crew.py
 ```
 
-On Windows, use the PowerShell setup in [Setting up a recipe](../../README.md#setting-up-a-recipe) for the virtualenv and the keys.
+On Windows, see the [setup guide](../../docs/setup.md#windows) for the PowerShell commands.
 
 Optional: `NEEV_MODEL` (defaults to `glm-5-2`).
 

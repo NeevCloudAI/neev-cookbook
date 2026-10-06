@@ -18,7 +18,7 @@ export NEEV_API_KEY=... NEEV_ORG_ID=... NEEV_PROJECT_ID=...
 npm run demo
 ```
 
-On Windows, set the keys with the PowerShell lines in [Setting up a recipe](../../README.md#setting-up-a-recipe).
+On Windows, see the [setup guide](../../docs/setup.md#windows) for the PowerShell commands.
 
 The demo starts the server, sends it ordinary and hostile code as two users, checks that each run was contained, waits for the idle timeout to delete both sandboxes, and asks the API to confirm they are gone. It exits `0` only when every check passed and every sandbox was deleted.
 
