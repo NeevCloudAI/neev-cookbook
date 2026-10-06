@@ -1,0 +1,361 @@
+month,department,category,budget_inr,actual_inr
+2025-01,Engineering,Cloud and Software,1440000,1399033
+2025-01,Engineering,Contractors,1040000,1028736
+2025-01,Engineering,Travel,448000,428074
+2025-01,Engineering,Office and Facilities,672000,601209
+2025-01,Engineering,Training and Events,256000,220183
+2025-01,Sales,Cloud and Software,990000,1044112
+2025-01,Sales,Contractors,715000,696368
+2025-01,Sales,Travel,308000,268932
+2025-01,Sales,Office and Facilities,462000,434361
+2025-01,Sales,Training and Events,176000,152886
+2025-01,Marketing,Cloud and Software,900000,912108
+2025-01,Marketing,Contractors,650000,686661
+2025-01,Marketing,Travel,280000,246364
+2025-01,Marketing,Office and Facilities,420000,365335
+2025-01,Marketing,Training and Events,160000,138492
+2025-01,Operations,Cloud and Software,810000,779256
+2025-01,Operations,Contractors,585000,594229
+2025-01,Operations,Travel,252000,226511
+2025-01,Operations,Office and Facilities,378000,339395
+2025-01,Operations,Training and Events,144000,144237
+2025-01,Customer Support,Cloud and Software,540000,570372
+2025-01,Customer Support,Contractors,390000,408744
+2025-01,Customer Support,Travel,168000,165940
+2025-01,Customer Support,Office and Facilities,252000,263153
+2025-01,Customer Support,Training and Events,96000,89366
+2025-01,Finance and HR,Cloud and Software,450000,469096
+2025-01,Finance and HR,Contractors,325000,318219
+2025-01,Finance and HR,Travel,140000,135692
+2025-01,Finance and HR,Office and Facilities,210000,189343
+2025-01,Finance and HR,Training and Events,80000,72695
+2025-02,Engineering,Cloud and Software,1440000,1291398
+2025-02,Engineering,Contractors,1040000,1057567
+2025-02,Engineering,Travel,448000,434804
+2025-02,Engineering,Office and Facilities,672000,627374
+2025-02,Engineering,Training and Events,256000,270749
+2025-02,Sales,Cloud and Software,990000,942602
+2025-02,Sales,Contractors,715000,654620
+2025-02,Sales,Travel,308000,314939
+2025-02,Sales,Office and Facilities,462000,450667
+2025-02,Sales,Training and Events,176000,180308
+2025-02,Marketing,Cloud and Software,900000,832340
+2025-02,Marketing,Contractors,650000,617066
+2025-02,Marketing,Travel,280000,285550
+2025-02,Marketing,Office and Facilities,420000,399544
+2025-02,Marketing,Training and Events,160000,159692
+2025-02,Operations,Cloud and Software,810000,819237
+2025-02,Operations,Contractors,585000,568935
+2025-02,Operations,Travel,252000,249722
+2025-02,Operations,Office and Facilities,378000,369486
+2025-02,Operations,Training and Events,144000,145668
+2025-02,Customer Support,Cloud and Software,540000,556780
+2025-02,Customer Support,Contractors,390000,400907
+2025-02,Customer Support,Travel,168000,156047
+2025-02,Customer Support,Office and Facilities,252000,244136
+2025-02,Customer Support,Training and Events,96000,94074
+2025-02,Finance and HR,Cloud and Software,450000,401483
+2025-02,Finance and HR,Contractors,325000,297696
+2025-02,Finance and HR,Travel,140000,129673
+2025-02,Finance and HR,Office and Facilities,210000,195764
+2025-02,Finance and HR,Training and Events,80000,77724
+2025-03,Engineering,Cloud and Software,1440000,1530505
+2025-03,Engineering,Contractors,1040000,951742
+2025-03,Engineering,Travel,448000,409878
+2025-03,Engineering,Office and Facilities,672000,663739
+2025-03,Engineering,Training and Events,256000,227758
+2025-03,Sales,Cloud and Software,990000,920906
+2025-03,Sales,Contractors,715000,719288
+2025-03,Sales,Travel,308000,303313
+2025-03,Sales,Office and Facilities,462000,472298
+2025-03,Sales,Training and Events,176000,170336
+2025-03,Marketing,Cloud and Software,900000,876820
+2025-03,Marketing,Contractors,650000,624300
+2025-03,Marketing,Travel,280000,262286
+2025-03,Marketing,Office and Facilities,420000,390041
+2025-03,Marketing,Training and Events,160000,145483
+2025-03,Operations,Cloud and Software,810000,791859
+2025-03,Operations,Contractors,585000,562213
+2025-03,Operations,Travel,252000,245632
+2025-03,Operations,Office and Facilities,378000,377046
+2025-03,Operations,Training and Events,144000,129764
+2025-03,Customer Support,Cloud and Software,540000,486515
+2025-03,Customer Support,Contractors,390000,346587
+2025-03,Customer Support,Travel,168000,159380
+2025-03,Customer Support,Office and Facilities,252000,245589
+2025-03,Customer Support,Training and Events,96000,97241
+2025-03,Finance and HR,Cloud and Software,450000,410261
+2025-03,Finance and HR,Contractors,325000,280240
+2025-03,Finance and HR,Travel,140000,136702
+2025-03,Finance and HR,Office and Facilities,210000,188807
+2025-03,Finance and HR,Training and Events,80000,71077
+2025-04,Engineering,Cloud and Software,1440000,1423275
+2025-04,Engineering,Contractors,1040000,1035978
+2025-04,Engineering,Travel,448000,450800
+2025-04,Engineering,Office and Facilities,672000,612779
+2025-04,Engineering,Training and Events,256000,266634
+2025-04,Sales,Cloud and Software,990000,878424
+2025-04,Sales,Contractors,715000,704778
+2025-04,Sales,Travel,308000,310549
+2025-04,Sales,Office and Facilities,462000,411233
+2025-04,Sales,Training and Events,176000,184686
+2025-04,Marketing,Cloud and Software,900000,815258
+2025-04,Marketing,Contractors,650000,656688
+2025-04,Marketing,Travel,280000,285159
+2025-04,Marketing,Office and Facilities,420000,367710
+2025-04,Marketing,Training and Events,160000,153919
+2025-04,Operations,Cloud and Software,810000,735570
+2025-04,Operations,Contractors,585000,552101
+2025-04,Operations,Travel,252000,257018
+2025-04,Operations,Office and Facilities,378000,655583
+2025-04,Operations,Training and Events,144000,143290
+2025-04,Customer Support,Cloud and Software,540000,527945
+2025-04,Customer Support,Contractors,390000,353200
+2025-04,Customer Support,Travel,168000,174257
+2025-04,Customer Support,Office and Facilities,252000,234512
+2025-04,Customer Support,Training and Events,96000,96272
+2025-04,Finance and HR,Cloud and Software,450000,433481
+2025-04,Finance and HR,Contractors,325000,303509
+2025-04,Finance and HR,Travel,140000,133715
+2025-04,Finance and HR,Office and Facilities,210000,191514
+2025-04,Finance and HR,Training and Events,80000,69866
+2025-05,Engineering,Cloud and Software,1440000,1717575
+2025-05,Engineering,Contractors,1040000,958374
+2025-05,Engineering,Travel,448000,430726
+2025-05,Engineering,Office and Facilities,672000,660844
+2025-05,Engineering,Training and Events,256000,251915
+2025-05,Sales,Cloud and Software,990000,934025
+2025-05,Sales,Contractors,715000,662233
+2025-05,Sales,Travel,308000,312864
+2025-05,Sales,Office and Facilities,462000,486088
+2025-05,Sales,Training and Events,176000,185272
+2025-05,Marketing,Cloud and Software,900000,937047
+2025-05,Marketing,Contractors,650000,579237
+2025-05,Marketing,Travel,280000,289059
+2025-05,Marketing,Office and Facilities,420000,389268
+2025-05,Marketing,Training and Events,160000,161243
+2025-05,Operations,Cloud and Software,810000,776854
+2025-05,Operations,Contractors,585000,524491
+2025-05,Operations,Travel,252000,242621
+2025-05,Operations,Office and Facilities,378000,330588
+2025-05,Operations,Training and Events,144000,129122
+2025-05,Customer Support,Cloud and Software,540000,502259
+2025-05,Customer Support,Contractors,390000,397261
+2025-05,Customer Support,Travel,168000,146495
+2025-05,Customer Support,Office and Facilities,252000,258349
+2025-05,Customer Support,Training and Events,96000,100408
+2025-05,Finance and HR,Cloud and Software,450000,397935
+2025-05,Finance and HR,Contractors,325000,324140
+2025-05,Finance and HR,Travel,140000,137080
+2025-05,Finance and HR,Office and Facilities,210000,194728
+2025-05,Finance and HR,Training and Events,80000,73556
+2025-06,Engineering,Cloud and Software,1440000,1684692
+2025-06,Engineering,Contractors,1040000,816584
+2025-06,Engineering,Travel,448000,402546
+2025-06,Engineering,Office and Facilities,672000,585225
+2025-06,Engineering,Training and Events,256000,240590
+2025-06,Sales,Cloud and Software,990000,967167
+2025-06,Sales,Contractors,715000,573716
+2025-06,Sales,Travel,308000,282369
+2025-06,Sales,Office and Facilities,462000,421891
+2025-06,Sales,Training and Events,176000,162551
+2025-06,Marketing,Cloud and Software,900000,936320
+2025-06,Marketing,Contractors,650000,494930
+2025-06,Marketing,Travel,280000,291324
+2025-06,Marketing,Office and Facilities,420000,444830
+2025-06,Marketing,Training and Events,160000,139344
+2025-06,Operations,Cloud and Software,810000,700396
+2025-06,Operations,Contractors,585000,452224
+2025-06,Operations,Travel,252000,258091
+2025-06,Operations,Office and Facilities,378000,378791
+2025-06,Operations,Training and Events,144000,137260
+2025-06,Customer Support,Cloud and Software,540000,480520
+2025-06,Customer Support,Contractors,390000,323497
+2025-06,Customer Support,Travel,168000,165641
+2025-06,Customer Support,Office and Facilities,252000,258493
+2025-06,Customer Support,Training and Events,96000,98409
+2025-06,Finance and HR,Cloud and Software,450000,422982
+2025-06,Finance and HR,Contractors,325000,241789
+2025-06,Finance and HR,Travel,140000,121771
+2025-06,Finance and HR,Office and Facilities,210000,184328
+2025-06,Finance and HR,Training and Events,80000,82316
+2025-07,Engineering,Cloud and Software,1440000,1598785
+2025-07,Engineering,Contractors,1040000,850494
+2025-07,Engineering,Travel,448000,467055
+2025-07,Engineering,Office and Facilities,672000,703241
+2025-07,Engineering,Training and Events,256000,242040
+2025-07,Sales,Cloud and Software,990000,959040
+2025-07,Sales,Contractors,715000,594387
+2025-07,Sales,Travel,308000,280489
+2025-07,Sales,Office and Facilities,462000,428425
+2025-07,Sales,Training and Events,176000,164264
+2025-07,Marketing,Cloud and Software,900000,910563
+2025-07,Marketing,Contractors,650000,450057
+2025-07,Marketing,Travel,280000,287987
+2025-07,Marketing,Office and Facilities,420000,406968
+2025-07,Marketing,Training and Events,160000,152307
+2025-07,Operations,Cloud and Software,810000,746382
+2025-07,Operations,Contractors,585000,434732
+2025-07,Operations,Travel,252000,229798
+2025-07,Operations,Office and Facilities,378000,376054
+2025-07,Operations,Training and Events,144000,123873
+2025-07,Customer Support,Cloud and Software,540000,531824
+2025-07,Customer Support,Contractors,390000,288075
+2025-07,Customer Support,Travel,168000,166302
+2025-07,Customer Support,Office and Facilities,252000,219019
+2025-07,Customer Support,Training and Events,96000,95388
+2025-07,Finance and HR,Cloud and Software,450000,474116
+2025-07,Finance and HR,Contractors,325000,239426
+2025-07,Finance and HR,Travel,140000,138781
+2025-07,Finance and HR,Office and Facilities,210000,182168
+2025-07,Finance and HR,Training and Events,80000,82463
+2025-08,Engineering,Cloud and Software,1440000,1675475
+2025-08,Engineering,Contractors,1040000,1100680
+2025-08,Engineering,Travel,448000,414930
+2025-08,Engineering,Office and Facilities,672000,625574
+2025-08,Engineering,Training and Events,256000,227034
+2025-08,Sales,Cloud and Software,990000,878448
+2025-08,Sales,Contractors,715000,702488
+2025-08,Sales,Travel,308000,279331
+2025-08,Sales,Office and Facilities,462000,399903
+2025-08,Sales,Training and Events,176000,168902
+2025-08,Marketing,Cloud and Software,900000,859758
+2025-08,Marketing,Contractors,650000,685416
+2025-08,Marketing,Travel,280000,252078
+2025-08,Marketing,Office and Facilities,420000,412614
+2025-08,Marketing,Training and Events,160000,169230
+2025-08,Operations,Cloud and Software,810000,763834
+2025-08,Operations,Contractors,585000,609832
+2025-08,Operations,Travel,252000,224148
+2025-08,Operations,Office and Facilities,378000,376900
+2025-08,Operations,Training and Events,144000,147540
+2025-08,Customer Support,Cloud and Software,540000,490172
+2025-08,Customer Support,Contractors,390000,368074
+2025-08,Customer Support,Travel,168000,162301
+2025-08,Customer Support,Office and Facilities,252000,223444
+2025-08,Customer Support,Training and Events,96000,95036
+2025-08,Finance and HR,Cloud and Software,450000,450386
+2025-08,Finance and HR,Contractors,325000,293057
+2025-08,Finance and HR,Travel,140000,134823
+2025-08,Finance and HR,Office and Facilities,210000,214934
+2025-08,Finance and HR,Training and Events,80000,73952
+2025-09,Engineering,Cloud and Software,1440000,1765819
+2025-09,Engineering,Contractors,1040000,975746
+2025-09,Engineering,Travel,448000,389873
+2025-09,Engineering,Office and Facilities,672000,618147
+2025-09,Engineering,Training and Events,256000,221350
+2025-09,Sales,Cloud and Software,990000,921020
+2025-09,Sales,Contractors,715000,636087
+2025-09,Sales,Travel,308000,282612
+2025-09,Sales,Office and Facilities,462000,470812
+2025-09,Sales,Training and Events,176000,151901
+2025-09,Marketing,Cloud and Software,900000,948969
+2025-09,Marketing,Contractors,650000,678799
+2025-09,Marketing,Travel,280000,279479
+2025-09,Marketing,Office and Facilities,420000,372897
+2025-09,Marketing,Training and Events,160000,142521
+2025-09,Operations,Cloud and Software,810000,819890
+2025-09,Operations,Contractors,585000,575419
+2025-09,Operations,Travel,252000,264101
+2025-09,Operations,Office and Facilities,378000,332332
+2025-09,Operations,Training and Events,144000,125327
+2025-09,Customer Support,Cloud and Software,540000,545643
+2025-09,Customer Support,Contractors,390000,411585
+2025-09,Customer Support,Travel,168000,149658
+2025-09,Customer Support,Office and Facilities,252000,222353
+2025-09,Customer Support,Training and Events,96000,97452
+2025-09,Finance and HR,Cloud and Software,450000,405366
+2025-09,Finance and HR,Contractors,325000,303241
+2025-09,Finance and HR,Travel,140000,129188
+2025-09,Finance and HR,Office and Facilities,210000,210769
+2025-09,Finance and HR,Training and Events,80000,76741
+2025-10,Engineering,Cloud and Software,1440000,1691753
+2025-10,Engineering,Contractors,1040000,1076168
+2025-10,Engineering,Travel,448000,402664
+2025-10,Engineering,Office and Facilities,672000,607382
+2025-10,Engineering,Training and Events,256000,247751
+2025-10,Sales,Cloud and Software,990000,912037
+2025-10,Sales,Contractors,715000,755527
+2025-10,Sales,Travel,308000,441146
+2025-10,Sales,Office and Facilities,462000,449674
+2025-10,Sales,Training and Events,176000,185052
+2025-10,Marketing,Cloud and Software,900000,852372
+2025-10,Marketing,Contractors,650000,641369
+2025-10,Marketing,Travel,280000,278160
+2025-10,Marketing,Office and Facilities,420000,439848
+2025-10,Marketing,Training and Events,160000,331710
+2025-10,Operations,Cloud and Software,810000,849066
+2025-10,Operations,Contractors,585000,508689
+2025-10,Operations,Travel,252000,233722
+2025-10,Operations,Office and Facilities,378000,393356
+2025-10,Operations,Training and Events,144000,127816
+2025-10,Customer Support,Cloud and Software,540000,540147
+2025-10,Customer Support,Contractors,390000,351340
+2025-10,Customer Support,Travel,168000,161496
+2025-10,Customer Support,Office and Facilities,252000,240230
+2025-10,Customer Support,Training and Events,96000,94273
+2025-10,Finance and HR,Cloud and Software,450000,397466
+2025-10,Finance and HR,Contractors,325000,330194
+2025-10,Finance and HR,Travel,140000,129399
+2025-10,Finance and HR,Office and Facilities,210000,185985
+2025-10,Finance and HR,Training and Events,80000,70711
+2025-11,Engineering,Cloud and Software,1440000,1739061
+2025-11,Engineering,Contractors,1040000,1059599
+2025-11,Engineering,Travel,448000,395433
+2025-11,Engineering,Office and Facilities,672000,664850
+2025-11,Engineering,Training and Events,256000,237496
+2025-11,Sales,Cloud and Software,990000,968529
+2025-11,Sales,Contractors,715000,707002
+2025-11,Sales,Travel,308000,407375
+2025-11,Sales,Office and Facilities,462000,474789
+2025-11,Sales,Training and Events,176000,177032
+2025-11,Marketing,Cloud and Software,900000,897679
+2025-11,Marketing,Contractors,650000,673689
+2025-11,Marketing,Travel,280000,277949
+2025-11,Marketing,Office and Facilities,420000,385579
+2025-11,Marketing,Training and Events,160000,298121
+2025-11,Operations,Cloud and Software,810000,697340
+2025-11,Operations,Contractors,585000,563502
+2025-11,Operations,Travel,252000,263431
+2025-11,Operations,Office and Facilities,378000,330451
+2025-11,Operations,Training and Events,144000,140086
+2025-11,Customer Support,Cloud and Software,540000,528964
+2025-11,Customer Support,Contractors,390000,361796
+2025-11,Customer Support,Travel,168000,148953
+2025-11,Customer Support,Office and Facilities,252000,252696
+2025-11,Customer Support,Training and Events,96000,89350
+2025-11,Finance and HR,Cloud and Software,450000,446443
+2025-11,Finance and HR,Contractors,325000,321849
+2025-11,Finance and HR,Travel,140000,129738
+2025-11,Finance and HR,Office and Facilities,210000,203698
+2025-11,Finance and HR,Training and Events,80000,71918
+2025-12,Engineering,Cloud and Software,1440000,2010230
+2025-12,Engineering,Contractors,1040000,919928
+2025-12,Engineering,Travel,448000,426708
+2025-12,Engineering,Office and Facilities,672000,602908
+2025-12,Engineering,Training and Events,256000,269776
+2025-12,Sales,Cloud and Software,990000,998012
+2025-12,Sales,Contractors,715000,659201
+2025-12,Sales,Travel,308000,455387
+2025-12,Sales,Office and Facilities,462000,472363
+2025-12,Sales,Training and Events,176000,156429
+2025-12,Marketing,Cloud and Software,900000,939792
+2025-12,Marketing,Contractors,650000,600399
+2025-12,Marketing,Travel,280000,282738
+2025-12,Marketing,Office and Facilities,420000,397620
+2025-12,Marketing,Training and Events,160000,143399
+2025-12,Operations,Cloud and Software,810000,775134
+2025-12,Operations,Contractors,585000,536190
+2025-12,Operations,Travel,252000,254836
+2025-12,Operations,Office and Facilities,378000,339288
+2025-12,Operations,Training and Events,144000,128642
+2025-12,Customer Support,Cloud and Software,540000,527824
+2025-12,Customer Support,Contractors,390000,385173
+2025-12,Customer Support,Travel,168000,146458
+2025-12,Customer Support,Office and Facilities,252000,218638
+2025-12,Customer Support,Training and Events,96000,96257
+2025-12,Finance and HR,Cloud and Software,450000,444312
+2025-12,Finance and HR,Contractors,325000,288801
+2025-12,Finance and HR,Travel,140000,123193
+2025-12,Finance and HR,Office and Facilities,210000,212132
+2025-12,Finance and HR,Training and Events,80000,78290
