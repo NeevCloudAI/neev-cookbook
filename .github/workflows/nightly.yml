@@ -4,8 +4,9 @@ name: nightly
 # stops working is caught before a reader finds it.
 #
 # Needs, on a project used only for this check:
-#   secrets   NEEV_API_KEY (Resource Type Sandboxes), NEEV_MODEL_API_KEY (Resource Type Model API)
-#   variables NEEV_ORG_ID, NEEV_PROJECT_ID
+#   secrets   NEEV_API_KEY (Resource Type Sandboxes), NEEV_MODEL_API_KEY (Resource Type Model API),
+#             NEEV_ORG_ID, NEEV_PROJECT_ID
+# The IDs are secrets, not variables, so the log masks them: a failed API call prints its URL.
 #
 # Not covered, and why:
 #   - The coding-agent apps themselves (Claude Code, Cursor, Codex): claude-code-over-mcp runs
@@ -18,9 +19,8 @@ name: nightly
 #     and several need a third-party framework's own setup.
 
 on:
-  # The schedule is off until the secrets and variables above are set; uncomment it then.
-  # schedule:
-  #   - cron: "30 1 * * *" # 07:00 IST
+  schedule:
+    - cron: "30 1 * * *" # 07:00 IST
   workflow_dispatch:
     inputs:
       recipes:
@@ -38,8 +38,8 @@ concurrency:
 env:
   NEEV_API_KEY: ${{ secrets.NEEV_API_KEY }}
   NEEV_MODEL_API_KEY: ${{ secrets.NEEV_MODEL_API_KEY }}
-  NEEV_ORG_ID: ${{ vars.NEEV_ORG_ID }}
-  NEEV_PROJECT_ID: ${{ vars.NEEV_PROJECT_ID }}
+  NEEV_ORG_ID: ${{ secrets.NEEV_ORG_ID }}
+  NEEV_PROJECT_ID: ${{ secrets.NEEV_PROJECT_ID }}
 
 jobs:
   plan:
