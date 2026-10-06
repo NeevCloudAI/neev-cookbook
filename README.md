@@ -19,6 +19,12 @@ python app_builder.py "a pomodoro timer with a calm green theme"
 
 In about a minute you get a public URL to an app an agent built inside a sandbox. Every recipe works the same way: its README lists what it needs, and it deletes everything it creates when it ends.
 
+<p align="center">
+  <img src="assets/prompt-to-live-app.png" alt="A todo app the agent built, open on its public preview URL" width="560">
+  <br>
+  <sub>A todo app the agent built inside a sandbox, open on its preview URL.</sub>
+</p>
+
 ## Recipes
 
 ### Build things with an agent
@@ -75,8 +81,6 @@ In about a minute you get a public URL to an app an agent built inside a sandbox
 | --- | --- | --- | --- |
 | **An agent that sleeps** | Pause between bursts of work and wake with the same process and its memory | [Python](recipes/agent-that-sleeps-python) |  |
 | **Coding tutor with a shared box** | A student and an AI tutor share one sandbox: SSH, a preview URL and pause between sessions | [Python](recipes/coding-tutor-python) |  |
-
-![A todo app built by the agent](assets/prompt-to-live-app.png)
 
 ## Integrations
 

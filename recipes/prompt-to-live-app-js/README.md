@@ -2,7 +2,9 @@
 
 Describe a web app in one sentence. An AI agent builds it inside an isolated NeevCloud sandbox and hands you a public URL you can open on your phone.
 
-![A todo app built by the agent, open on its preview URL](../../assets/prompt-to-live-app.png)
+<p align="center">
+  <img src="../../assets/prompt-to-live-app.png" alt="A todo app built by the agent, open on its preview URL" width="560">
+</p>
 
 ## What you need
 
