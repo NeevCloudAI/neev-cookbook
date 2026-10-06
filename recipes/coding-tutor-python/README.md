@@ -47,7 +47,7 @@ With `--no-wait`, or with no terminal (as in CI), the run doesn't stop for you. 
 ## Use it in your product
 
 - **One box per student:** create a sandbox per student at enrolment, pause it at the end of each session, and resume it at the next. Delete it when the course ends.
-- **Remote students:** the tunnel here runs on the machine that runs the script. For students on their own machines, open the tunnel in your own backend or give them a terminal in the browser, and use the preview URL for their app.
+- **Remote students:** the tunnel here runs on the machine that runs the script. It listens only on `127.0.0.1`, so students on their own machines can't use it. Give them a terminal in the browser instead, and the preview URL for their app.
 - **Your own exercises:** replace the files in `exercise/` (`EXERCISE_FILES` in `coding_tutor.py`).
 - **Your own tutor style:** `SYSTEM_PROMPT` in `tutor.py` asks for pointers, not fixes. In our runs `glm-4-7` often still named the exact call that fixes the bug, so tighten the prompt or add a review step if your course needs subtler hints.
 - **Browser access:** students can use the preview URL for their app, and SSH or your own web terminal for the shell.
