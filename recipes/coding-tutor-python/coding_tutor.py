@@ -160,10 +160,45 @@ def _root_cause(e: BaseException) -> BaseException:
     return e
 
 
+def _your_turn(sandbox, url, attempt, notes, process, answer, ask, log, ssh, fetch, sleep, clock):
+    """Hands the box to you as the student, then picks up your edits: restarts the app if app.py changed.
+
+    Returns what session 2 must find after the resume: the code and notes as you left them, the
+    running server and the answer it gave.
+    """
+    with sandbox.ssh() as tunnel:
+        log("   Your turn: you are the student now. In another terminal, open a shell in the box:")
+        log(f"     {ssh_command(tunnel)}")
+        log("   Read TUTOR_NOTES.md, fix count_words in app.py, and run python3 check.py.")
+        log(f"   Your app: {url}{PROBE}")
+        try:
+            ask("   Press Enter to end the session; the box is paused with your work in it. ")
+        except EOFError:  # no terminal to answer from: carry on as an unattended run
+            pass
+        code_now = ssh_ok(tunnel, ssh, "cat app.py")
+        notes = ssh_ok(tunnel, ssh, "cat TUTOR_NOTES.md")
+    if code_now != attempt:
+        log("   app.py changed; restarting your app so the preview shows your version...")
+        sandbox.processes.kill(process.id)
+        deadline = clock() + APP_TIMEOUT_S
+        while sandbox.processes.get(process.id).state == "running":  # the port is free only once it has exited
+            if clock() > deadline:
+                raise RuntimeError("your old app did not stop")
+            sleep(0.5)
+        process = sandbox.processes.start(["python3", "app.py"])
+        status, body = wait_for_app(fetch, url + PROBE, sleep, clock)
+        log(f"   GET {PROBE} -> {describe(status, body)}")
+        if not answered(status, body):
+            raise RuntimeError(f"your app did not answer after the restart: {describe(status, body)}")
+        answer = (status, body)
+    return code_now, notes, process, answer
+
+
 def run(client, model_client, model: str, connect, keep_minutes: float = 0, log=print, ssh=ssh_run,
-        fetch=fetch_count, sleep=time.sleep, clock=time.monotonic, wait=time.sleep) -> int:
+        fetch=fetch_count, sleep=time.sleep, clock=time.monotonic, wait=time.sleep, ask=None) -> int:
     """Runs two tutoring sessions in one sandbox with a pause between them, and always deletes it.
 
+    With `ask`, session 1 hands over to you as the student before the pause, and waits for Enter.
     Returns 0 only when the preview URL answered, the tutor gave hints without touching the
     student's files, and the files, the server and the URL all survived the pause and resume.
     """
@@ -209,6 +244,9 @@ def run(client, model_client, model: str, connect, keep_minutes: float = 0, log=
         notes = "# Hints from your tutor\n\n" + "".join(f"{i}. {h}\n" for i, h in enumerate(hints, 1))
         sandbox.files.write("TUTOR_NOTES.md", notes)
         log("   The tutor left the student's files untouched; the hints are saved in TUTOR_NOTES.md.")
+        if ask is not None:
+            attempt, notes, process, first_answer = _your_turn(sandbox, url, attempt, notes, process,
+                                                               first_answer, ask, log, ssh, fetch, sleep, clock)
 
         log("6. Pausing the sandbox between sessions...")
         sandbox.pause()
@@ -268,6 +306,8 @@ def main(argv=None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--keep", type=float, default=0,
                         help="minutes to keep the sandbox, SSH tunnel and preview URL open at the end (default 0)")
+    parser.add_argument("--no-wait", action="store_true",
+                        help="run straight through without handing session 1 over to you (the default with no terminal)")
     args = parser.parse_args(argv)
     missing = missing_env(os.environ)
     if missing:
@@ -282,7 +322,8 @@ def main(argv=None) -> int:
     model_client = AsyncOpenAI(base_url=MODEL_BASE_URL, api_key=os.environ["NEEV_MODEL_API_KEY"])
     connect = mcp_connect(os.environ["NEEV_API_KEY"])
     with NeevAI() as client:
-        return run(client, model_client, os.environ.get("MODEL", DEFAULT_MODEL), connect, args.keep)
+        ask = input if sys.stdin.isatty() and not args.no_wait else None
+        return run(client, model_client, os.environ.get("MODEL", DEFAULT_MODEL), connect, args.keep, ask=ask)
 
 
 if __name__ == "__main__":

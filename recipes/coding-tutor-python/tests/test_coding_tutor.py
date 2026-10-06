@@ -35,14 +35,72 @@ def tutor_model():
                       tool_call("finish", {"hints": HINTS}, "c2")])
 
 
-def go(sb, model=None, session=None, keep=0, wait=None, lines=None, fetch=None, client=None):
+def go(sb, model=None, session=None, keep=0, wait=None, lines=None, fetch=None, client=None, ask=None):
     clock = Clock()
     session = session or FakeSession(sb)
     connect = connector(session)
     code = coding_tutor.run(client or FakeClient(sb), model or tutor_model(), "m", connect, keep,
                             log=(lines.append if lines is not None else lambda *_: None), ssh=fake_ssh,
-                            fetch=fetch or sb.fetch, sleep=clock.sleep, clock=clock, wait=wait or (lambda s: None))
+                            fetch=fetch or sb.fetch, sleep=clock.sleep, clock=clock, wait=wait or (lambda s: None),
+                            ask=ask)
     return code, connect
+
+
+FIXED = "    return len(text.split())"
+
+
+def student_fixes(sb, prompts):
+    """An ask() that plays the student: they fix count_words over SSH, then press Enter."""
+    def ask(prompt):
+        prompts.append(prompt)
+        sb.workspace["app.py"] = sb.workspace["app.py"].replace('    return len(text.split(" "))', FIXED)
+        return ""
+    return ask
+
+
+def test_interactive_hands_over_to_the_student_and_restarts_their_app_with_the_fix():
+    sb, lines, prompts = FakeSandbox(), [], []
+    code, _ = go(sb, lines=lines, ask=student_fixes(sb, prompts))
+    assert code == 0, lines
+    assert len(prompts) == 1 and "Enter" in prompts[0]
+    # before waiting, the student is told how to reach their box and what to try
+    handover = "\n".join(lines)
+    assert "ssh -p" in handover and "https://8000-preview.example" in handover and "TUTOR_NOTES.md" in handover
+    # their change is picked up: the app restarts, the preview counts correctly, and it survives the pause
+    assert sb.start_count == 2 and sb.killed == ["proc-1"]
+    assert any('200 {"text": "two  spaces", "words": 2}' in l for l in lines)
+    assert FIXED in sb.workspace["app.py"]
+    assert any(l.startswith("Session state survived") for l in lines)
+
+
+def test_interactive_without_changes_keeps_the_same_app_running():
+    sb, lines, prompts = FakeSandbox(), [], []
+    code, _ = go(sb, lines=lines, ask=lambda p: prompts.append(p) or "")
+    assert code == 0, lines
+    assert len(prompts) == 1 and sb.start_count == 1 and sb.killed == []
+
+
+def test_a_closed_stdin_at_the_handover_carries_on():
+    def closed(prompt):
+        raise EOFError
+    sb, lines = FakeSandbox(), []
+    code, _ = go(sb, lines=lines, ask=closed)
+    assert code == 0, lines
+    assert any(l.startswith("Session state survived") for l in lines)
+
+
+def test_main_waits_for_the_student_only_on_a_terminal_without_no_wait(monkeypatch):
+    seen = []
+    monkeypatch.setattr(coding_tutor, "run", lambda *a, **kw: seen.append(kw.get("ask")) or 0)
+    monkeypatch.setattr(coding_tutor.shutil, "which", lambda name: "/usr/bin/ssh")
+    for k in ("NEEV_API_KEY", "NEEV_ORG_ID", "NEEV_PROJECT_ID", "NEEV_MODEL_API_KEY"):
+        monkeypatch.setenv(k, "x")
+    monkeypatch.setattr(coding_tutor.sys.stdin, "isatty", lambda: True)
+    assert coding_tutor.main([]) == 0
+    assert coding_tutor.main(["--no-wait"]) == 0
+    monkeypatch.setattr(coding_tutor.sys.stdin, "isatty", lambda: False)
+    assert coding_tutor.main([]) == 0
+    assert [a is not None for a in seen] == [True, False, False]
 
 
 def test_missing_env_names_every_missing_variable():
