@@ -18,8 +18,9 @@ name: nightly
 #     and several need a third-party framework's own setup.
 
 on:
-  schedule:
-    - cron: "30 1 * * *" # 07:00 IST
+  # The schedule is off until the secrets and variables above are set; uncomment it then.
+  # schedule:
+  #   - cron: "30 1 * * *" # 07:00 IST
   workflow_dispatch:
     inputs:
       recipes:
