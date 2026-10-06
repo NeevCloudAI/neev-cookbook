@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Word counter</title>
+  <style>
+    body { font-family: system-ui, sans-serif; max-width: 36rem; margin: 3rem auto; padding: 0 1rem; }
+    textarea { width: 100%; min-height: 8rem; font: inherit; }
+    #result { font-size: 1.5rem; margin-top: 1rem; }
+  </style>
+</head>
+<body>
+  <h1>Word counter</h1>
+  <label for="text">Type or paste some text</label>
+  <textarea id="text">two  spaces</textarea>
+  <div id="result" aria-live="polite"></div>
+  <script>
+    const box = document.getElementById("text"), out = document.getElementById("result");
+    async function update() {
+      const res = await fetch("count?text=" + encodeURIComponent(box.value));
+      out.textContent = res.ok ? (await res.json()).words + " words" : "error " + res.status;
+    }
+    box.addEventListener("input", update);
+    update();
+  </script>
+</body>
+</html>
