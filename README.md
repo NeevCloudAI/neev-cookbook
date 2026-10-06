@@ -20,9 +20,9 @@ python app_builder.py "a pomodoro timer with a calm green theme"
 In about a minute you get a public URL to an app an agent built inside a sandbox. Every recipe works the same way: its README lists what it needs, and it deletes everything it creates when it ends.
 
 <p align="center">
-  <img src="assets/prompt-to-live-app.png" alt="A todo app the agent built, open on its public preview URL" width="560">
+  <img src="assets/prompt-to-live-app.png" alt="The pomodoro timer the agent built from the quickstart command, open on its public preview URL" width="560">
   <br>
-  <sub>A todo app the agent built inside a sandbox, open on its preview URL.</sub>
+  <sub>The pomodoro timer the agent built from the command above, open on its preview URL.</sub>
 </p>
 
 ## Recipes
