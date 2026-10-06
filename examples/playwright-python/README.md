@@ -2,6 +2,10 @@
 
 Run a real headless browser inside a sandbox, screenshot a page and pull the image back to your machine. The sandbox can reach only the hosts the install and the page need.
 
+<p align="center">
+  <img src="../../assets/runs/playwright-python.gif" alt="A real run of this example, recorded in a terminal" width="720">
+</p>
+
 ```bash
 python3.12 -m venv .venv
 source .venv/bin/activate
@@ -19,7 +23,7 @@ On Windows, see the [setup guide](../../docs/setup.md#windows) for the PowerShel
 Output:
 
 ```
-  sandbox ready: pw-96d36691
+  sandbox ready: pw-dae6cc9f
   installing playwright (a few minutes on first run)
   page title: Example Domain
   saved screenshot.png (71386 bytes)
@@ -27,6 +31,12 @@ Output:
 
   sandbox deleted
 ```
+
+The screenshot that run saved, taken by the browser inside the sandbox:
+
+<p align="center">
+  <img src="../../assets/playwright-screenshot.png" alt="example.com as rendered by headless Chromium inside the sandbox" width="560">
+</p>
 
 The whole run took about five minutes, most of it installing the browser and its system packages.
 

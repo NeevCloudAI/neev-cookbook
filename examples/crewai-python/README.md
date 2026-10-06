@@ -3,6 +3,10 @@
 CrewAI no longer executes code for you. If you enable `allow_code_execution`
 today, the library tells you so itself:
 
+<p align="center">
+  <img src="../../assets/runs/crewai-python.gif" alt="A real run of this example, recorded in a terminal" width="720">
+</p>
+
 ```
 allow_code_execution is deprecated and will be removed in v2.0.
 CodeInterpreterTool is no longer available.
@@ -45,11 +49,9 @@ Optional: `NEEV_MODEL` (defaults to `glm-5-2`).
 Output:
 
 ```
-  sandbox crew-f3e0fec3 ready
+  sandbox crew-65950523 ready
 
-  result: The script computed the 30th Fibonacci number ... printed:
-
-  **832040**
+  result: 832040
 
   sandbox deleted
 ```

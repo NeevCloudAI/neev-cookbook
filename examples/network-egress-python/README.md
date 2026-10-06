@@ -2,6 +2,10 @@
 
 A sandbox reaches only the hosts you name. This creates two sandboxes, one with an allow-list and one with the default policy, and checks from inside each what it can reach.
 
+<p align="center">
+  <img src="../../assets/runs/network-egress-python.gif" alt="A real run of this example, recorded in a terminal" width="720">
+</p>
+
 ```bash
 python3.12 -m venv .venv
 source .venv/bin/activate
