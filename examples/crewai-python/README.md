@@ -18,9 +18,8 @@ you hand to an agent like any other tool.
 
 ## Why a sandbox and not a container of your own
 
-The vulnerabilities that led to the removal were not about Docker being missing.
-They were about what happens when model-generated code runs somewhere it can
-reach things. A sandbox here is a machine with root inside and a boundary
+The risk with model-generated code is not a missing container runtime. It is
+what that code can reach once it runs. A sandbox here is a machine with root inside and a boundary
 outside: egress denies everything by default until you allow a domain, so an
 agent talked into exfiltrating data has nowhere to send it.
 
@@ -32,13 +31,13 @@ pip install -r requirements.txt
 export NEEV_API_KEY=...
 export NEEV_ORG_ID=...
 export NEEV_PROJECT_ID=...
-export NEEV_MODEL_BASE_URL=...     # any OpenAI-compatible endpoint
+export NEEV_MODEL_BASE_URL=https://inference.ai.neevcloud.com/v1   # or any OpenAI-compatible endpoint
 export NEEV_MODEL_API_KEY=...
 
 python sandboxed_crew.py
 ```
 
-Optional: `NEEV_REGION` and `NEEV_MODEL`.
+Optional: `NEEV_MODEL` (defaults to `glm-5-2`).
 
 Output:
 

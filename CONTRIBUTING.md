@@ -22,7 +22,7 @@ Each folder is self-contained: its own dependencies, its own tests, no shared he
 - Prints numbered progress lines, so a run reads like a demo, and turns errors into one line instead of
   a traceback.
 - Exits `0` only when the visible result was achieved.
-- Never prints keys and never writes them into a sandbox. Fixture secrets are dummy values created at
+- Never prints keys and never writes them to a file, on your machine or in a sandbox. Fixture secrets are dummy values created at
   runtime; never commit a `.env` file.
 - Uses NeevCloud models through the OpenAI-compatible endpoint, `glm-4-7` by default, overridable with
   `MODEL`. Agent tools come from the Sandbox MCP server's own tool list, filtered to an allow-list,
@@ -34,7 +34,7 @@ Every recipe README follows the same order:
 
 1. One sentence on the problem.
 2. A screenshot or a block of real output.
-3. What you need: Python 3.11+ or Node 20+, and the keys (Resource Type **Sandboxes** for
+3. What you need: Python 3.11+ or Node 20.3+, and the keys (Resource Type **Sandboxes** for
    `NEEV_API_KEY`, **Model API** for `NEEV_MODEL_API_KEY`).
 4. Run it: install, export the keys, run.
 5. How it works: about five numbered steps naming the SDK and MCP calls.

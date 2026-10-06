@@ -8,7 +8,7 @@ Describe a web app in one sentence. An AI agent builds it inside an isolated Nee
 
 ## What you need
 
-- Node 20 or later
+- Node 20.3 or later
 - A NeevCloud account with two API keys from **Account > API Keys**:
   - one with Resource Type **Sandboxes** (`NEEV_API_KEY`)
   - one with Resource Type **Model API** (`NEEV_MODEL_API_KEY`)

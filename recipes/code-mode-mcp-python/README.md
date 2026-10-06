@@ -4,7 +4,7 @@ An agent that answers a question about 200 log files by reading them one tool ca
 
 ## What you need
 
-- Python 3.11 or later (the script uses `ExceptionGroup`)
+- Python 3.11 or later
 - A NeevCloud account with two API keys from **Account > API Keys**:
   - one with Resource Type **Sandboxes** (`NEEV_API_KEY`)
   - one with Resource Type **Model API** (`NEEV_MODEL_API_KEY`)

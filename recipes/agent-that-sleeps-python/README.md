@@ -62,7 +62,7 @@ Activity means calls into the sandbox (commands, files, processes); `sandbox.kee
 
 ## Time and cost
 
-About a minute end to end with `glm-4-7` and the default 30-second nap. In our runs the sandbox reached `Paused` about 1.3 seconds after `pause()`, and the first command ran 2.4 to 3.5 seconds after `resume()`; how long it slept made no difference (30 to 60 seconds tested). Each burst gets at most 12 agent steps and 2 minutes of model time. You pay for the sandbox while it runs and for the model tokens the agent uses. While it is paused, no replica runs and its processes are frozen.
+About a minute end to end with `glm-4-7` and the default 30-second nap. In our runs the sandbox reached `Paused` about 1.3 seconds after `pause()`, and the first command ran 2.4 to 3.5 seconds after `resume()`; how long it slept made no difference (30 to 60 seconds tested). Each burst gets at most 12 agent steps and 2 minutes of model time. You pay for the sandbox while it runs and for the model tokens the agent uses. While it is paused, it uses no compute and its processes are frozen.
 
 ## Cleanup
 

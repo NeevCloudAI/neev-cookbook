@@ -21,8 +21,6 @@ hello from inside
 deleted
 ```
 
-Optional: `NEEV_REGION` (defaults to `as-south-1`).
-
 Start here, then see [crewai-python](../crewai-python) for handing a sandbox to
 an agent as a tool, or [langgraph-python](../langgraph-python) for connecting
 over MCP with no SDK at all.

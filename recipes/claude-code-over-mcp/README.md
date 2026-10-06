@@ -110,7 +110,7 @@ export NEEV_ORG_ID=... NEEV_PROJECT_ID=...
 python -c "from neevai import NeevAI; NeevAI().sandboxes.create({'name': 'my-coding-box'}, allow_egress=['registry.npmjs.org'])"
 ```
 
-Then ask for something like "Write a small Express app in the app folder with one test, install it with npm, and run its tests". The agent finds the sandbox already exists and works in it; `npm install express` succeeds and every other host stays unreachable. See [Internet Access and Egress](https://docs.ai.neevcloud.com/agentic-studio/overview/internet-access) for the allow-list rules.
+Then ask for something like "Write a small Express app in the app folder with one test, install it with npm, and run its tests". The agent finds the sandbox already exists and works in it; `npm install express` succeeds because the registry is on the sandbox's allow-list. See [Internet Access and Egress](https://docs.ai.neevcloud.com/agentic-studio/overview/internet-access) for the allow-list rules.
 
 ## 4. See what it did
 
