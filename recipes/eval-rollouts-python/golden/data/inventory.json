@@ -1,0 +1,10 @@
+[
+  {"sku": "CBL-USB-C", "name": "USB-C cable, 1 m", "stock": 42},
+  {"sku": "CHG-65W", "name": "65 W charger", "stock": 3},
+  {"sku": "HUB-7P", "name": "7-port USB hub", "stock": 5},
+  {"sku": "KBD-MECH", "name": "Mechanical keyboard", "stock": 0},
+  {"sku": "MON-27", "name": "27-inch monitor", "stock": 11},
+  {"sku": "MSE-WL", "name": "Wireless mouse", "stock": 4},
+  {"sku": "SSD-1T", "name": "1 TB SSD", "stock": 17},
+  {"sku": "WEB-CAM", "name": "HD webcam", "stock": 6}
+]
