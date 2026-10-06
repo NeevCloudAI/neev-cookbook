@@ -2,7 +2,9 @@
 
 Ask a question about a CSV in plain English. An AI agent answers it by writing and running pandas code inside an isolated NeevCloud sandbox that cannot reach the internet, and hands you a chart and its findings.
 
-![Monthly revenue for the top cities, charted by the agent from the bundled sample data](../../assets/ai-data-analyst.png)
+<p align="center">
+  <img src="../../assets/ai-data-analyst.png" alt="Monthly revenue for the top cities, charted by the agent from the bundled sample data" width="640">
+</p>
 
 ## What you need
 
