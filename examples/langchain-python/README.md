@@ -6,6 +6,10 @@ The [langgraph-python](../langgraph-python) example connects over MCP. This one
 uses the Python SDK and plain `@tool` functions, which is shorter when you are
 already writing Python and want to decide exactly what the agent can do.
 
+<p align="center">
+  <img src="../../assets/runs/langchain-python.gif" alt="A real run of this example, recorded in a terminal" width="720">
+</p>
+
 ## Run it
 
 ```bash
@@ -27,7 +31,7 @@ On Windows, see the [setup guide](../../docs/setup.md#windows) for the PowerShel
 Output:
 
 ```
-  sandbox ready: lc-083c9530
+  sandbox ready: lc-787e0123
 
   agent: 80.0
 

@@ -6,6 +6,10 @@ An Agents SDK agent with a sandbox as its tool.
 this works against any OpenAI-compatible endpoint — including NeevCloud's own
 inference API, which is what the commands below point at.
 
+<p align="center">
+  <img src="../../assets/runs/openai-agents-sdk-python.gif" alt="A real run of this example, recorded in a terminal" width="720">
+</p>
+
 ## Run it
 
 ```bash
@@ -25,6 +29,29 @@ python sandbox_agent.py
 On Windows, see the [setup guide](../../docs/setup.md#windows) for the PowerShell commands.
 
 The agent writes `primes.py`, runs it, and reports the output.
+
+Output:
+
+````
+  sandbox ready: oa-92008635
+
+  agent: Here is exactly what it printed:
+
+```
+2
+3
+5
+7
+11
+13
+17
+19
+23
+29
+```
+
+  sandbox deleted
+````
 
 ## Notes
 

@@ -2,6 +2,10 @@
 
 Create a sandbox, run a command, delete it.
 
+<p align="center">
+  <img src="../../assets/runs/hello-world-js.gif" alt="A real run of this example, recorded in a terminal" width="720">
+</p>
+
 ```bash
 npm install
 
@@ -17,7 +21,7 @@ On Windows, see the [setup guide](../../docs/setup.md#windows) for the PowerShel
 Output:
 
 ```
-sandbox 01a1103d-a841-76f9-8841-19bd40a30336 is Ready
+sandbox 01a111e1-6c14-737f-b859-07e616a1bad8 is Ready
 Linux x86_64
 hello from inside
 deleted

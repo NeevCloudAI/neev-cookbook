@@ -7,6 +7,10 @@ at the sandbox MCP endpoint with your API key, and the agent gets the whole
 surface: create a sandbox, run commands, read and write files, manage processes,
 expose ports, snapshot and roll back.
 
+<p align="center">
+  <img src="../../assets/runs/langgraph-python.gif" alt="A real run of this example, recorded in a terminal" width="720">
+</p>
+
 ## What this example shows
 
 Two agents run in sequence. Each one holds a connection bound to its own sandbox

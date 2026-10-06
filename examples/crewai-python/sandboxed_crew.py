@@ -90,12 +90,12 @@ def _run_crew(sandbox) -> None:
             "Write a Python script to a file that computes the 30th Fibonacci "
             "number, run it with python3, and report the number it printed."
         ),
-        expected_output="The 30th Fibonacci number.",
+        expected_output="Only the number the script printed, with no other text.",
         agent=analyst,
     )
 
     result = Crew(agents=[analyst], tasks=[task], verbose=False).kickoff()
-    print(f"\n  result: {str(result).strip()[:200]}")
+    print(f"\n  result: {str(result).strip()}")
 
 
 if __name__ == "__main__":

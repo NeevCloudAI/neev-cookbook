@@ -2,6 +2,10 @@
 
 An AI SDK agent whose one tool runs commands on a real Linux machine.
 
+<p align="center">
+  <img src="../../assets/runs/vercel-ai-sdk-js.gif" alt="A real run of this example, recorded in a terminal" width="720">
+</p>
+
 ## Run it
 
 ```bash
@@ -23,7 +27,7 @@ it with `NEEV_MODEL_BASE_URL` for any other OpenAI-compatible provider.
 Output:
 
 ```
-  sandbox ready: ai-sdk-mue2z8as
+  sandbox ready: ai-sdk-muwuuryy
 
   agent: antelope
 

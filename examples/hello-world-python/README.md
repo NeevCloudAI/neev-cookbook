@@ -2,6 +2,10 @@
 
 The smallest useful thing: create a sandbox, run a command, delete it.
 
+<p align="center">
+  <img src="../../assets/runs/hello-world-python.gif" alt="A real run of this example, recorded in a terminal" width="720">
+</p>
+
 ```bash
 python3.12 -m venv .venv
 source .venv/bin/activate
@@ -19,7 +23,7 @@ On Windows, see the [setup guide](../../docs/setup.md#windows) for the PowerShel
 Output:
 
 ```
-sandbox 01a1103d-833f-7458-9d79-538a9d198c7b is Ready
+sandbox 01a111e0-da7d-7e3b-894f-5d175ed2f082 is Ready
 Linux x86_64
 hello from inside
 deleted

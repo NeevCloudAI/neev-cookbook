@@ -7,7 +7,7 @@ Turn a CSV into a finished business report, a PDF and an Excel workbook, without
 </p>
 
 <p align="center">
-  <img src="../../assets/report-generator.png" alt="Page 1 of the expense report the agent built from the bundled sample data" width="420">
+  <img src="../../assets/report-generator.png" alt="Page 1 of the expense report from the run recorded above" width="420">
 </p>
 
 ## What you need
