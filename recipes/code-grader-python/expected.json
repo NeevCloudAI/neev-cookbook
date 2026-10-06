@@ -1,0 +1,8 @@
+{
+  "cheater.py": {"score": 0, "outcome": "blocked"},
+  "correct.py": {"score": 100, "outcome": "passed"},
+  "exfiltrator.py": {"score": 0, "outcome": "blocked"},
+  "infinite_loop.py": {"score": 83, "outcome": "timeout"},
+  "partial.py": {"score": 67, "outcome": "partial"},
+  "wrong.py": {"score": 0, "outcome": "failed"}
+}
