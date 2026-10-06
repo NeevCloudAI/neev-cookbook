@@ -14,7 +14,7 @@ export NEEV_PROJECT_ID=...
 python egress_allow_list.py
 ```
 
-On Windows, use the PowerShell setup in [Setting up a recipe](../../README.md#setting-up-a-recipe) for the virtualenv and the keys.
+On Windows, see the [setup guide](../../docs/setup.md#windows) for the PowerShell commands.
 
 Output:
 

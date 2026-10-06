@@ -55,7 +55,7 @@ export NEEV_API_KEY=... NEEV_MODEL_API_KEY=... NEEV_ORG_ID=... NEEV_PROJECT_ID=.
 python hosted_agent.py
 ```
 
-On Windows, use the PowerShell setup in [Setting up a recipe](../../README.md#setting-up-a-recipe) for the virtualenv and the keys.
+On Windows, see the [setup guide](../../docs/setup.md#windows) for the PowerShell commands.
 
 The script exits 0 only when every check passes: the test file is unchanged, the tests pass after the agent's fix, and after the resume the agent is the same running machine and the tests still pass.
 

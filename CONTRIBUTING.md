@@ -57,7 +57,7 @@ written by hand.
   ```
 
   On Windows, create and activate it with `py -3.12 -m venv .venv` and `.venv\Scripts\Activate.ps1`, as in
-  [Setting up a recipe](README.md#setting-up-a-recipe).
+  the [setup guide](docs/setup.md#windows).
 
 - Fakes in `tests/fakes.py` (or `test/fakes.ts`) mirror the real SDK and MCP shapes.
 - Cover the happy path, cleanup on failure, `Ctrl+C`, the step and time limits, malformed tool

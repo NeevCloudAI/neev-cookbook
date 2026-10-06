@@ -40,7 +40,7 @@ export NEEV_API_KEY=... NEEV_MODEL_API_KEY=... NEEV_ORG_ID=... NEEV_PROJECT_ID=.
 python sleepy_agent.py
 ```
 
-On Windows, use the PowerShell setup in [Setting up a recipe](../../README.md#setting-up-a-recipe) for the virtualenv and the keys.
+On Windows, see the [setup guide](../../docs/setup.md#windows) for the PowerShell commands.
 
 `--nap 300` keeps the sandbox paused for five minutes instead of 30 seconds. The script exits 0 only when the process that wakes up is proven to be the one that went to sleep.
 

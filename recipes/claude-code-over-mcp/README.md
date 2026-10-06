@@ -126,7 +126,7 @@ export NEEV_API_KEY=... NEEV_ORG_ID=... NEEV_PROJECT_ID=...
 python verify.py my-coding-box
 ```
 
-On Windows, use the PowerShell setup in [Setting up a recipe](../../README.md#setting-up-a-recipe) for the virtualenv and the keys.
+On Windows, see the [setup guide](../../docs/setup.md#windows) for the PowerShell commands.
 
 It looks the sandbox up by name, reads its audit trail page by page from the moment it was created, and prints one line per operation, oldest first. For a sandbox where a file was written and read, a command run, a server started and a folder listed:
 
