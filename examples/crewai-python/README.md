@@ -6,7 +6,6 @@ today, the library tells you so itself:
 ```
 allow_code_execution is deprecated and will be removed in v2.0.
 CodeInterpreterTool is no longer available.
-Use dedicated sandbox services like E2B or Modal.
 ```
 
 `CodeInterpreterTool` is already gone from `crewai_tools` — the import fails. So
