@@ -4,10 +4,6 @@ Recipes for building AI agents you can trust with a real computer. Every recipe 
 
 Each recipe runs as written: one install, one command, and one or two API keys. For the full product documentation, see [docs.ai.neevcloud.com](https://docs.ai.neevcloud.com/).
 
-<p align="center">
-  <img src="assets/runs/prompt-to-live-app-python.gif" alt="A real run of the quickstart recipe: an agent builds an app in a sandbox and publishes it on a URL" width="720">
-</p>
-
 ## Prerequisites
 
 - Two NeevCloud API keys, one **Sandboxes** and one **Model API** ([create a key](https://docs.ai.neevcloud.com/getting-started/create-api-key))
