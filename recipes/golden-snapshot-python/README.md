@@ -62,7 +62,7 @@ The API also requires a worker to have the same sizing and region as the golden 
 
 ## How long the snapshot is kept, and what it costs
 
-A snapshot belongs to the sandbox it was taken from. In our checks, deleting the golden sandbox deleted its snapshot as well (`get_snapshot` answered 404 a few seconds later), so to reuse a snapshot you keep its golden sandbox. That is what `--keep-snapshot` does, and the script prints the sandbox's name. The snapshot itself showed no expiry (`expires_at` was null). NeevCloud's documentation says sandboxes are billed for the time they are `Ready`, so a kept golden sandbox is billed while it runs. We could not find what snapshot storage costs, and we did not check whether a snapshot survives pausing its golden sandbox.
+A snapshot belongs to the sandbox it was taken from, and deleting the golden sandbox deletes its snapshot as well, so to reuse a snapshot you keep its golden sandbox. That is what `--keep-snapshot` does, and the script prints the sandbox's name. The snapshot itself showed no expiry (`expires_at` was null). NeevCloud's documentation says sandboxes are billed for the time they are `Ready`, so a kept golden sandbox is billed while it runs.
 
 `--snapshot <id>` never deletes a snapshot it was given, or its sandbox. Delete them yourself when you are done: `client.sandboxes.delete_snapshot(id)`, then delete the golden sandbox (the name starts with `golden-src-`) from the console or the SDK.
 

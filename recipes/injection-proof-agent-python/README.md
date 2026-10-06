@@ -7,7 +7,7 @@ whether or not the model falls for the trick.
 
 ## What you need
 
-- Python 3.11 or later (the script uses `ExceptionGroup`)
+- Python 3.11 or later
 - A NeevCloud account with two API keys from **Account > API Keys**:
   - one with Resource Type **Sandboxes** (`NEEV_API_KEY`)
   - one with Resource Type **Model API** (`NEEV_MODEL_API_KEY`)

@@ -6,7 +6,7 @@ restart. A denied request goes back to the agent as a refusal, and the host is n
 
 ## What you need
 
-- Python 3.11 or later (the script uses `ExceptionGroup`)
+- Python 3.11 or later
 - A NeevCloud account with two API keys from **Account > API Keys**:
   - one with Resource Type **Sandboxes** (`NEEV_API_KEY`)
   - one with Resource Type **Model API** (`NEEV_MODEL_API_KEY`)

@@ -91,9 +91,7 @@ has been cut off from the internet.
    exfiltration host, one to the package index that was reachable a moment ago — both come back with
    0 bytes and no response, proving the lockdown took hold. `ps` shows the background beacon still
    running. `sandbox.audit(...)` shows the command trail records only the program and target, never
-   the arguments or the bytes. The secret reads come from the server's own record: the sandbox does
-   not see a process's own file reads, so a server can read a file quietly — which is exactly why the
-   egress policy, not a log, is what protects you.
+   the arguments or the bytes. The secret reads come from the server's own record.
 
 `sandbox.delete()` runs in a `finally` block, so the sandbox is removed even if a step fails or you
 press `Ctrl+C`.

@@ -23,13 +23,13 @@ taking the model's word for it.
 pip install -r requirements.txt
 
 export NEEV_API_KEY=...            # from the NeevCloud console
-export NEEV_MODEL_BASE_URL=...     # any OpenAI-compatible endpoint
+export NEEV_MODEL_BASE_URL=https://inference.ai.neevcloud.com/v1   # or any OpenAI-compatible endpoint
 export NEEV_MODEL_API_KEY=...
 
 python multi_agent_sandboxes.py
 ```
 
-Optional: `NEEV_REGION` (defaults to `as-south-1`) and `NEEV_MODEL`.
+Optional: `NEEV_REGION` (defaults to `as-south-1`) and `NEEV_MODEL` (defaults to `glm-4-7`).
 
 Expected output:
 
@@ -67,7 +67,7 @@ MultiServerMCPClient({
 })
 ```
 
-The bearer token identifies you and resolves your organisation and project. The
+The bearer token identifies you and resolves your organization and project. The
 sandbox name picks which machine this connection works in — give two agents the
 same name and they share a filesystem, give them different names and they don't.
 

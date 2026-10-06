@@ -119,8 +119,8 @@ commands, read and write files, start and manage processes, expose ports,
 snapshot, and roll back. The sandbox name binds the connection to one machine, so
 giving each agent its own name gives each agent its own isolated environment.
 
-The Python and JavaScript SDKs are the other way in if you would rather call the
-platform directly:
+The SDKs and the CLI are the other way in if you would rather call the platform
+directly:
 
 - [neev-sdk-python](https://github.com/NeevCloudAI/neev-sdk-python)
 - [neev-sdk-js](https://github.com/NeevCloudAI/neev-sdk-js)
@@ -128,8 +128,9 @@ platform directly:
 
 ## Models
 
-The examples take any OpenAI-compatible endpoint. NeevCloud serves models too, so
-you do not need a second provider:
+NeevCloud serves models too, so you do not need a second provider. The recipes use
+NeevCloud's OpenAI-compatible endpoint, and the framework examples take any
+OpenAI-compatible endpoint through `NEEV_MODEL_BASE_URL`:
 
 ```
 https://inference.ai.neevcloud.com/v1
@@ -148,8 +149,8 @@ Available models: `glm-5-2`, `glm-4-7`, `deepseek-v3-2`, `kimi-k3`, `minimax-m3`
 `minimax-m2.7`, `minimax-m2.7-highspeed`, `gpt-oss-120b`, `gpt-oss-20b`,
 `llama-3.3-70b-versatile`, `llama-3.1-8b-instant`, `gemma-4-31b`.
 
-The recipes default to `glm-4-7`, which answers tool calls quickly and reliably; set `MODEL` to try
-another. Reasoning models spend tokens thinking before they answer. Give them headroom —
+The recipes default to `glm-4-7`, which answers tool calls quickly and reliably. Set `MODEL` to try
+another (`--models` in the eval rollouts recipe, `NEEV_MODEL` in the framework examples). Reasoning models spend tokens thinking before they answer. Give them headroom —
 a low `max_tokens` returns an empty message and no tool call.
 
 ## What a sandbox gives you
@@ -171,7 +172,7 @@ a low `max_tokens` returns an empty message and no tool call.
 recipes/      one folder per recipe, each self-contained with its own README and tests
 examples/     framework integrations and short single-feature examples
 assets/       screenshots used by the READMEs
-.github/      the nightly check that runs every recipe against NeevCloud
+.github/      issue and pull request templates, and the nightly check that runs every recipe
 ```
 
 ## Contributing
