@@ -8,6 +8,7 @@ import secrets
 import sys
 import time
 from dataclasses import dataclass
+from pathlib import Path
 
 from agent import AgentFailed, finish_tool, run_agent
 
@@ -221,9 +222,21 @@ def _print_trails(trails: dict, sandboxes: dict, keys: dict, script_key: str, lo
             log(f"     {r.at:%H:%M:%S}  {label:<8}  {r.tool:<9} {what:<20} {r.outcome.value}")
 
 
+def _save(out: Path, suffix: str, files: dict[str, str], log) -> None:
+    """Writes the files the tester judged to out/<run id>/, so the crew's work outlives its sandboxes."""
+    folder = out / suffix
+    folder.mkdir(parents=True, exist_ok=True)
+    for name, content in files.items():
+        (folder / name).write_text(content)
+    log(f"   Saved {', '.join(files)} to {folder}/")
+
+
 def run(task: str, client, model_client, model: str, connect, keys: dict, script_key: str, log=print,
-        sleep=time.sleep) -> int:
-    """Creates one sandbox per agent, runs the crew, prints the audit trails, and always deletes every sandbox."""
+        sleep=time.sleep, out: Path | None = None) -> int:
+    """Creates one sandbox per agent, runs the crew, prints the audit trails, and always deletes every sandbox.
+
+    With `out`, a passing crew's plan, code and tests are saved there before the sandboxes go.
+    """
     sandboxes: dict = {}
     try:
         suffix = secrets.token_hex(4)
@@ -241,6 +254,8 @@ def run(task: str, client, model_client, model: str, connect, keys: dict, script
         if changed:
             passed, shown = False, f"{', '.join(changed)} changed in the tester's sandbox; {shown}"
         log(f"   Tests in {sandboxes['tester'].name}: {'passed' if passed else 'FAILED'}: {shown}")
+        if passed and out is not None:
+            _save(out, suffix, handed, log)
         log("7. Audit trails, oldest first (who acted, what, on which file):")
         _print_trails(_read_trails(sandboxes, sleep), sandboxes, keys, script_key, log)
         return 0 if passed else 1
@@ -270,6 +285,8 @@ def main(argv=None) -> int:
     """Parses arguments, checks the environment and every per-agent key, and runs the crew."""
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("task", nargs="?", default=DEFAULT_TASK, help="the small function the crew builds")
+    parser.add_argument("--out", type=Path, default=Path("crew-output"),
+                        help="where a passing crew's plan, code and tests are saved (default crew-output/)")
     args = parser.parse_args(argv)
     missing = missing_env(os.environ)
     if missing:
@@ -291,7 +308,7 @@ def main(argv=None) -> int:
     model_client = AsyncOpenAI(base_url=MODEL_BASE_URL, api_key=os.environ["NEEV_MODEL_API_KEY"])
     with NeevAI() as client:
         return run(args.task, client, model_client, os.environ.get("MODEL", DEFAULT_MODEL), mcp_connect, keys,
-                   os.environ["NEEV_API_KEY"])
+                   os.environ["NEEV_API_KEY"], out=args.out)
 
 
 if __name__ == "__main__":

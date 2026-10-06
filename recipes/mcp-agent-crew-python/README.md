@@ -22,6 +22,8 @@ On Windows, see the [setup guide](../../docs/setup.md#windows).
 
 By default the crew builds a `slugify(text)` function. Pass your own small task as an argument: `python crew.py "a function that converts Roman numerals to integers"`.
 
+When the tester's run passes, the crew's work is saved on your machine in `crew-output/<run id>/`: the planner's `PLAN.md`, and the coder's `solution.py` and `test_solution.py`. Run `python3 -m unittest` in that folder to check it yourself. Change the folder with `--out`.
+
 With one key, every agent still works in its own sandbox, but the audit trail shows the same credential for all of them. To see each action attributed to its agent, create one more **Sandboxes** key per agent and export `PLANNER_API_KEY`, `CODER_API_KEY` and `TESTER_API_KEY`.
 
 ## How it works
@@ -30,7 +32,7 @@ With one key, every agent still works in its own sandbox, but the audit trail sh
 2. **One URL, separate sessions.** Each agent connects to the same MCP URL with its own key and its own `x-sandbox-name` header, so everything it does lands in its own sandbox, under its own key.
 3. **Plan and code.** The planner writes `PLAN.md`. The script copies it to the coder, who writes `solution.py` and its tests and runs them until they pass.
 4. **Test.** The script copies the plan, code and tests to the tester, who runs the full suite and gives a verdict. The tester has no tool to write files, so it can't change what it judges.
-5. **Audit.** The script prints each sandbox's audit trail, with the key behind every action: the agent's key for its own work, the script's key for the hand-overs.
+5. **Save and audit.** If the tests passed, the script saves the plan, code and tests the tester judged to `crew-output/`. It prints each sandbox's audit trail, with the key behind every action: the agent's key for its own work, the script's key for the hand-overs.
 
 ## Use it in your product
 
