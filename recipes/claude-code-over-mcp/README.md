@@ -120,7 +120,7 @@ Then ask for something like "Write a small Express app in the app folder with on
 
 ## 4. See what it did
 
-While the sandbox still exists, run:
+While the sandbox still exists, print its audit trail:
 
 ```bash
 python3.12 -m venv .venv
@@ -132,86 +132,44 @@ python verify.py my-coding-box
 
 On Windows, see the [setup guide](../../docs/setup.md#windows) for the PowerShell commands.
 
-It looks the sandbox up by name, reads its audit trail page by page from the moment it was created, and prints one line per operation, oldest first. For a sandbox where a file was written and read, a command run, a server started and a folder listed:
+You get one line per operation, oldest first:
 
 ```text
-$ python verify.py coding-agent-cbdc5d75
 UTC       operation       program     target                          outcome                    took  credential
 15:34:18  fs.write        -           app/server.js                   success                     2ms  xxxxxxxx
-15:34:18  fs.read         -           app/server.js                   success                     1ms  xxxxxxxx
 15:34:18  exec            -           -                               success                   146ms  xxxxxxxx
 15:34:18  process.start   node        -                               success                     5ms  xxxxxxxx
-15:34:18  fs.list         -           app                             success                     1ms  xxxxxxxx
-
-5 operations, 0 ended in an error. Operations per credential:
-  xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx: 5
 ```
 
-- **operation** is what happened: a file read, write or listing, a command, a process start.
-- **program** is the program's name where the trail records one, such as for a process start. It is never its arguments, so secrets passed on a command line do not end up in the trail. Commands run through the MCP `exec` tool show `-` here.
-- **target** is the file or folder acted on.
-- **outcome** says whether the operation itself completed, not the program's exit code: a test run that fails still reads `success`. `error` comes with a reason, such as `not_found` or `invalid_argument`.
-- **credential** identifies the API key the operation ran under (the full ID is in the summary). Work done over MCP is recorded under the key the agent connected with, just like SDK calls, so give each agent its own key if you want to tell them apart.
+- **operation**: a file read, write or listing, a command, or a process start.
+- **program**: the program's name where it is recorded, never its arguments. Commands run through the MCP `exec` tool show `-` for now.
+- **outcome**: whether the operation completed, not the program's exit code. A failing test run still reads `success`.
+- **credential**: the API key the operation ran under.
 
-Records appear a few seconds after the work, so `verify.py` waits a moment and re-reads the trail until it stops changing. It exits 1 if the sandbox does not exist or nothing was recorded.
+Records appear a few seconds after the work, so `verify.py` waits until the trail stops changing.
 
 ## 5. Clean up
 
-Ask the agent to delete the sandbox (it calls `delete_sandbox`), or delete it from the console. Run `verify.py` first: the trail is read by sandbox name, so it cannot be looked up once the sandbox is gone. Until it is deleted, the sandbox counts against your project's sandbox quota.
+Run `verify.py` first, then ask the agent to delete the sandbox (it calls `delete_sandbox`) or delete it from the console. The trail can't be read once the sandbox is gone, and until then the sandbox counts against your project's quota.
+
+## Use it with your team
+
+- **One sandbox per task:** the `x-sandbox-name` header picks the machine. Use one name per project or branch, and agents working on different tasks never share files.
+- **One key per agent:** every operation is recorded under the API key that made it. Give each agent, or each person's agent, its own key to tell them apart in the trail.
+- **Keep a record:** run `verify.py` before deleting a sandbox and save its output alongside the pull request the agent's work went into.
+- **Control the network:** create the sandbox yourself with an allow-list, as in section 3, so the agent can reach only what the task needs.
 
 ## Try it without a coding agent
 
-`simulate_agent.py` runs the same session with the MCP Python client and a model served by NeevCloud, then checks the result.
+`simulate_agent.py` plays the coding agent: it connects to the MCP server like your agent would, has a NeevCloud model do the task from section 3, runs the tests itself, prints the audit trail and deletes the sandbox. In the same shell as section 4, add a **Model API** key and run it:
 
 ```bash
-python3.12 -m venv .venv
-source .venv/bin/activate
-pip install -r requirements.txt
-export NEEV_API_KEY=... NEEV_MODEL_API_KEY=... NEEV_ORG_ID=... NEEV_PROJECT_ID=...
+export NEEV_MODEL_API_KEY=...
 python simulate_agent.py
 ```
 
-From a real run:
-
-```text
-1. Connecting a glm-4-7 coding agent to the sandbox MCP server as coding-agent-83a451aa (no sandbox exists yet)
-   step 1: create_sandbox
-   step 2: get_sandbox
-   step 3: get_sandbox
-   step 4: fs_write app/server.js
-   step 5: fs_write app/server.test.js
-   step 6: exec node --test
-   step 7: finish
-2. Agent says: Tests passed: 1/1. The Node.js HTTP server successfully responds to GET /health with {"ok":true}, and the node:test runner confirms the server behavior on a free port.
-3. Ran node --test in the sandbox: 1 passed, 0 failed
-4. What the agent did, from the sandbox's audit trail:
-   UTC       operation       program     target                          outcome                    took  credential
-   15:43:42  fs.write        -           app/server.js                   success                     2ms  xxxxxxxx
-   15:43:47  fs.write        -           app/server.test.js              success                     1ms  xxxxxxxx
-   15:43:49  exec            -           -                               success                   913ms  xxxxxxxx
-   15:43:52  exec            -           -                               success                   959ms  xxxxxxxx
-
-   4 operations, 0 ended in an error. Operations per credential:
-     xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx: 4
-   Sandbox deleted.
-```
-
-The script's own test run (line 3 of the output) is in the trail too, as an `exec` under the same key.
-
-### How it works
-
-1. The script connects to the MCP server with `x-sandbox-name: coding-agent-<random>`, a sandbox that does not exist yet, exactly as your coding agent would.
-2. The model gets six tools from the server's own tool list: `create_sandbox`, `get_sandbox`, `fs_write`, `fs_read`, `fs_list` and `exec`. It is given the prompt from section 3 and creates the sandbox itself. Any other tool, or a `create_sandbox` for a different name, is refused.
-3. When the model says it is done, the script runs `node --test` in the sandbox itself rather than trusting the model's summary.
-4. It reads the audit trail with `client.sandboxes.get(name)` and `sandbox.audit(cursor=...)`, the same code as `verify.py`.
-5. It deletes the sandbox in a `finally` block, so it goes even if the model fails or you press `Ctrl+C`.
-
-It exits 0 only when the tests pass and the trail records the agent's file writes. The model is `glm-4-7` by default; set `MODEL` to try another, for example `MODEL=glm-5-2`. The agent gets at most 20 steps and 5 minutes.
+The agent gets six of the server's tools: `create_sandbox`, `get_sandbox`, `fs_write`, `fs_read`, `fs_list` and `exec`. Any other tool, or a `create_sandbox` for a different name, is refused. The script exits 0 only when the tests pass and the trail records the agent's file writes. The model is `glm-4-7` by default; set `MODEL` to try another.
 
 ## Time and cost
 
-With your own coding agent, you pay for the sandbox while it exists and for your agent's own model as usual. `simulate_agent.py` took 28 to 38 seconds with `glm-4-7` in our runs, and 76 seconds with `glm-5-2`; you pay for under a minute of sandbox time and the model tokens of about ten short steps.
-
-## Cleanup
-
-`simulate_agent.py` deletes its sandbox when it ends, fails or you press `Ctrl+C`. If the process is killed outright, delete any leftover `coding-agent-` sandbox from the console. A sandbox your own coding agent created stays until you or the agent delete it.
+With your own coding agent, you pay for the sandbox while it exists and for your agent's model as usual. `simulate_agent.py` takes 28 to 38 seconds with `glm-4-7`, under a minute of sandbox time plus about ten short model steps. It deletes its sandbox when it ends, fails or you press `Ctrl+C`. If the process is killed outright, delete any leftover `coding-agent-` sandbox from the console.

@@ -8,6 +8,8 @@ An AI SDK agent whose one tool runs commands on a real Linux machine.
 
 ## Run it
 
+You need Node 20+, a **Sandboxes** and a **Model API** key ([create a key](https://docs.ai.neevcloud.com/getting-started/create-api-key)), and your [organization and project IDs](https://docs.ai.neevcloud.com/getting-started/org-and-project).
+
 ```bash
 npm install
 

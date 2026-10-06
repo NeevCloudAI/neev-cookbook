@@ -1,6 +1,6 @@
 # AI data analyst
 
-Ask a question about a CSV in plain English. An AI agent answers it by writing and running pandas code inside an isolated NeevCloud sandbox that cannot reach the internet, and hands you a chart and its findings.
+Ask a question about a CSV in plain English. An AI agent answers it by writing and running pandas code in an isolated NeevCloud sandbox with no internet access, and gives you a chart and its findings.
 
 <p align="center">
   <img src="../../assets/runs/ai-data-analyst-python.gif" alt="A real run of this recipe, recorded in a terminal" width="720">
@@ -10,15 +10,9 @@ Ask a question about a CSV in plain English. An AI agent answers it by writing a
   <img src="../../assets/ai-data-analyst.png" alt="Monthly revenue for the top cities, charted by the agent from the bundled sample data" width="640">
 </p>
 
-## What you need
-
-- Python 3.11 or later
-- A NeevCloud account with two API keys from **Account > API Keys** ([how to create one](https://docs.ai.neevcloud.com/getting-started/create-api-key)):
-  - one with Resource Type **Sandboxes** (`NEEV_API_KEY`)
-  - one with Resource Type **Model API** (`NEEV_MODEL_API_KEY`)
-- Your [organization and project IDs](https://docs.ai.neevcloud.com/getting-started/org-and-project) (`NEEV_ORG_ID`, `NEEV_PROJECT_ID`)
-
 ## Run it
+
+You need Python 3.11+, a **Sandboxes** and a **Model API** key ([create a key](https://docs.ai.neevcloud.com/getting-started/create-api-key)), and your [organization and project IDs](https://docs.ai.neevcloud.com/getting-started/org-and-project).
 
 ```bash
 python3.12 -m venv .venv
@@ -28,11 +22,9 @@ export NEEV_API_KEY=... NEEV_MODEL_API_KEY=... NEEV_ORG_ID=... NEEV_PROJECT_ID=.
 python analyst.py
 ```
 
-On Windows, see the [setup guide](../../docs/setup.md#windows) for the PowerShell commands.
+On Windows, see the [setup guide](../../docs/setup.md#windows).
 
-With no arguments it analyses the bundled sample, `data/sales.csv`: 384 rows of synthetic monthly sales for eight Indian cities and four product categories in 2025, with made-up festive-season and monsoon effects. The chart is saved as `chart.png` and the findings are printed.
-
-To use your own data and question:
+With no arguments it analyses the bundled sample, `data/sales.csv`: a year of synthetic monthly sales for eight Indian cities. The chart is saved as `chart.png` and the findings are printed. To use your own data and question:
 
 ```bash
 python analyst.py --csv tickets.csv --out tickets.png "Which support channel is slowest to resolve?"
@@ -40,22 +32,26 @@ python analyst.py --csv tickets.csv --out tickets.png "Which support channel is 
 
 ## How it works
 
-The script and the agent hold different powers. The script uses the SDK for the lifecycle and the network; the agent only gets workspace tools over MCP.
+1. **Install.** The script starts a sandbox that can reach only the Python package index, and installs pandas and matplotlib.
+2. **Lock down.** It then removes all internet access with `sandbox.update(...)`, and only then uploads your CSV.
+3. **Analyse.** An agent connects to the sandbox over MCP. Its main tool, `run_python`, runs the code the model writes inside the sandbox. It keeps going until it has saved `chart.png` and written its findings.
+4. **Download.** The script reads the chart back with `sandbox.files.read(...)`, checks it is a PNG, saves it and prints the findings.
+5. **Clean up.** The sandbox, with your CSV in it, is deleted when the script ends, fails or you press `Ctrl+C`.
 
-1. `client.sandboxes.create({...}, allow_egress=["pypi.org", "files.pythonhosted.org"])` starts an isolated Linux machine that can reach only the Python package index. `sandbox.exec(["python3", "-m", "pip", "install", ...])` installs `pandas` and `matplotlib`, which the default template does not include.
-2. `sandbox.update({"egress": {"mode": "deny_all"}})` then removes all internet access, before your data is uploaded with `sandbox.files.upload_file(path, "data.csv")`. Code the model writes cannot open a connection to any host, so the only data that leaves the sandbox is what that code prints back to the model.
-3. The agent (`agent.py`) connects to the sandbox MCP server with the `x-sandbox-name` header, so its session is bound to that one sandbox. It keeps the server's `fs_list` tool, plus two local ones: `run_python(code)`, which writes the code to `analysis.py` with the MCP `fs_write` tool and runs it with the MCP `exec` tool, and `finish(findings)`, which is accepted only once `chart.png` exists. Any other tool, such as `delete_sandbox` or a bare `exec`, is refused.
-4. `sandbox.files.read("chart.png")` downloads the chart. The script checks it is a PNG before saving it and printing the findings.
-5. `sandbox.delete()` runs in a `finally` block, so the sandbox is removed even if the agent fails or you press `Ctrl+C`.
+## Use it in your product
 
-The sandbox runs in NeevCloud's `as-south-1` region in Indore, India, so your CSV is stored and processed there. The model is served by NeevCloud's Model API. It never receives the file as such, only the question, the code it writes and what that code prints, which can include rows of your data. The Model API does not let you choose the region a request is served from.
+- **"Ask your data" in your app:** call `run()` in `analyst.py` with the user's question and their uploaded file. It saves the chart to the path you give and prints the findings; send both back to your user.
+- **Your own analyses:** change `SYSTEM_PROMPT` in `agent.py`, for example to always produce a summary table or to follow your charting style.
+- **Other libraries:** add packages to the install step in `analyst.py` (`PIP_INSTALL`); they are installed before internet access is removed.
 
-The model is `glm-4-7` by default. Set `MODEL` to use a different one, for example `MODEL=glm-5-2`.
+## Good to know
+
+- Code the model writes cannot open a network connection, so the only data that leaves the sandbox is what that code prints back to the model.
+- The model never receives your file as such, only the question, the code it writes and what that code prints, which can include rows of your data.
+- The sandbox runs in NeevCloud's `as-south-1` region in Indore, India, so your CSV is stored and processed there. The Model API does not let you choose the region a request is served from.
+- The agent gets `run_python`, `fs_list` and `finish`. Any other tool, such as `delete_sandbox` or a bare `exec`, is refused.
+- The model is `glm-4-7` by default. Set `MODEL` to try another, for example `MODEL=glm-5-2`.
 
 ## Time and cost
 
-Typically 75 to 95 seconds end to end with the default model: about 30 seconds to install pandas and matplotlib, then 4 to 7 agent steps. The agent gets at most 20 steps and 4 minutes. You pay for the sandbox while it runs and for the model tokens the agent uses.
-
-## Cleanup
-
-The sandbox and everything in it, including the uploaded CSV, are deleted when the script ends, fails or you press `Ctrl+C`. If the process is killed outright, delete any leftover `data-analyst-` sandbox from the console.
+Usually 75 to 95 seconds: about 30 seconds to install pandas and matplotlib, then 4 to 7 agent steps. The agent is limited to 20 steps and 4 minutes. You pay for the sandbox while it runs and for the model tokens. If the process is killed outright, delete any leftover `data-analyst-` sandbox from the console.

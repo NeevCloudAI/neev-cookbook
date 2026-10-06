@@ -6,6 +6,8 @@ A sandbox reaches only the hosts you name. This creates two sandboxes, one with 
   <img src="../../assets/runs/network-egress-python.gif" alt="A real run of this example, recorded in a terminal" width="720">
 </p>
 
+You need Python 3.11+, a **Sandboxes** key ([create a key](https://docs.ai.neevcloud.com/getting-started/create-api-key)) and your [organization and project IDs](https://docs.ai.neevcloud.com/getting-started/org-and-project).
+
 ```bash
 python3.12 -m venv .venv
 source .venv/bin/activate
