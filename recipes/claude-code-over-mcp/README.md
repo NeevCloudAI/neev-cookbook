@@ -8,7 +8,7 @@ There is nothing to install for the agent side: one URL, one API key and one hea
 
 - A NeevCloud account with a project [API key](https://docs.ai.neevcloud.com/getting-started/create-api-key) created with Resource Type **Sandboxes** (`NEEV_API_KEY`)
 - Claude Code, Cursor or Codex
-- For the scripts: Python 3.11 or later, and your organization and project IDs (`NEEV_ORG_ID`, `NEEV_PROJECT_ID`) for the project the key belongs to
+- For the scripts: Python 3.11 or later, and your [organization and project IDs](https://docs.ai.neevcloud.com/getting-started/org-and-project) (`NEEV_ORG_ID`, `NEEV_PROJECT_ID`) for the project the key belongs to
 - For `simulate_agent.py` only: a second key with Resource Type **Model API** (`NEEV_MODEL_API_KEY`)
 
 ## 1. Put the key in your environment
@@ -61,7 +61,7 @@ In PowerShell, put it on one line or end each line with a backtick instead of `\
 
 Claude Code fills in `${NEEV_API_KEY}` from the environment when it starts the server. It does this only for the project's `.mcp.json`, which is why the command uses `--scope project`. You can also write the file by hand. Start Claude Code, approve the `neev-sandbox` server when it asks, and check it under `/mcp`.
 
-**Cursor.** Create `.cursor/mcp.json` in the project, or `~/.cursor/mcp.json` for every project:
+**Cursor.** Create `.cursor/mcp.json` in the project, or `~/.cursor/mcp.json` for every project ([Connect Cursor](https://docs.ai.neevcloud.com/getting-started/mcp/connect-cursor) in the docs):
 
 ```json
 {
@@ -77,7 +77,7 @@ Claude Code fills in `${NEEV_API_KEY}` from the environment when it starts the s
 }
 ```
 
-**Codex.** Add this to `~/.codex/config.toml` (`%USERPROFILE%\.codex\config.toml` on Windows). Codex reads the key from the variable named in `bearer_token_env_var`:
+**Codex.** Add this to `~/.codex/config.toml` (`%USERPROFILE%\.codex\config.toml` on Windows). Codex reads the key from the variable named in `bearer_token_env_var` ([Connect Codex](https://docs.ai.neevcloud.com/getting-started/mcp/connect-codex) in the docs):
 
 ```toml
 [mcp_servers.neev-sandbox]
@@ -105,6 +105,8 @@ A new sandbox has no internet access, which is why this prompt avoids npm packag
 No MCP tool can open the network: what a sandbox may reach is set by you through the API or the SDK, never by the agent. To let it install from npm, create the sandbox yourself before giving the task, with only the npm registry allowed:
 
 ```bash
+python3.12 -m venv .venv
+source .venv/bin/activate
 pip install -r requirements.txt
 export NEEV_ORG_ID=... NEEV_PROJECT_ID=...
 python -c "from neevai import NeevAI; NeevAI().sandboxes.create({'name': 'my-coding-box'}, allow_egress=['registry.npmjs.org'])"
@@ -117,10 +119,14 @@ Then ask for something like "Write a small Express app in the app folder with on
 While the sandbox still exists, run:
 
 ```bash
+python3.12 -m venv .venv
+source .venv/bin/activate
 pip install -r requirements.txt
 export NEEV_API_KEY=... NEEV_ORG_ID=... NEEV_PROJECT_ID=...
 python verify.py my-coding-box
 ```
+
+On Windows, use the PowerShell setup in [Setting up a recipe](../../README.md#setting-up-a-recipe) for the virtualenv and the keys.
 
 It looks the sandbox up by name, reads its audit trail page by page from the moment it was created, and prints one line per operation, oldest first. For a sandbox where a file was written and read, a command run, a server started and a folder listed:
 
@@ -154,6 +160,8 @@ Ask the agent to delete the sandbox (it calls `delete_sandbox`), or delete it fr
 `simulate_agent.py` runs the same session with the MCP Python client and a model served by NeevCloud, then checks the result.
 
 ```bash
+python3.12 -m venv .venv
+source .venv/bin/activate
 pip install -r requirements.txt
 export NEEV_API_KEY=... NEEV_MODEL_API_KEY=... NEEV_ORG_ID=... NEEV_PROJECT_ID=...
 python simulate_agent.py

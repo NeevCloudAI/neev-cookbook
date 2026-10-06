@@ -8,17 +8,21 @@ server — but that server is off the allow-list, so the connection never opens.
 ## What you need
 
 - Python 3.11 or later
-- A NeevCloud account with an API key from **Account > API Keys** with Resource Type **Sandboxes**
+- A NeevCloud account with an API key from **Account > API Keys** ([how to create one](https://docs.ai.neevcloud.com/getting-started/create-api-key)) with Resource Type **Sandboxes**
   (`NEEV_API_KEY`). This recipe runs no model, so it does not need a Model API key.
-- Your organization and project IDs (`NEEV_ORG_ID`, `NEEV_PROJECT_ID`)
+- Your [organization and project IDs](https://docs.ai.neevcloud.com/getting-started/org-and-project) (`NEEV_ORG_ID`, `NEEV_PROJECT_ID`)
 
 ## Run it
 
 ```bash
+python3.12 -m venv .venv
+source .venv/bin/activate
 pip install -r requirements.txt
 export NEEV_API_KEY=... NEEV_ORG_ID=... NEEV_PROJECT_ID=...
 python safe_install.py            # or: python safe_install.py <a-different-pypi-package>
 ```
+
+On Windows, use the PowerShell setup in [Setting up a recipe](../../README.md#setting-up-a-recipe) for the virtualenv and the keys.
 
 The secret in the fixture is a dummy value written at runtime, and the collector host is never on the
 allow-list, so nothing real is ever sent anywhere. The script exits `0` only when the install-time

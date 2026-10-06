@@ -3,6 +3,8 @@
 A sandbox reaches only the hosts you name. This creates two sandboxes, one with an allow-list and one with the default policy, and checks from inside each what it can reach.
 
 ```bash
+python3.12 -m venv .venv
+source .venv/bin/activate
 pip install -r requirements.txt
 
 export NEEV_API_KEY=...
@@ -11,6 +13,8 @@ export NEEV_PROJECT_ID=...
 
 python egress_allow_list.py
 ```
+
+On Windows, use the PowerShell setup in [Setting up a recipe](../../README.md#setting-up-a-recipe) for the virtualenv and the keys.
 
 Output:
 

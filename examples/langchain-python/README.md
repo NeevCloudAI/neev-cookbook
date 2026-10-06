@@ -9,6 +9,8 @@ already writing Python and want to decide exactly what the agent can do.
 ## Run it
 
 ```bash
+python3.12 -m venv .venv
+source .venv/bin/activate
 pip install -r requirements.txt
 
 export NEEV_API_KEY=...
@@ -19,6 +21,8 @@ export NEEV_MODEL_API_KEY=...
 
 python sandbox_agent.py
 ```
+
+On Windows, use the PowerShell setup in [Setting up a recipe](../../README.md#setting-up-a-recipe) for the virtualenv and the keys.
 
 Output:
 

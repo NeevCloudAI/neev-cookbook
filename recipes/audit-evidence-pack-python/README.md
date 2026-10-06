@@ -31,16 +31,20 @@ Your auditor asks what your agents did in production last month, and under which
 ## What you need
 
 - Python 3.11 or later
-- A NeevCloud API key with Resource Type **Sandboxes** (`NEEV_API_KEY`), from **Account > API Keys**. No model key is needed: nothing here calls a model.
-- Your organization and project IDs (`NEEV_ORG_ID`, `NEEV_PROJECT_ID`)
+- A NeevCloud API key with Resource Type **Sandboxes** (`NEEV_API_KEY`), from **Account > API Keys** ([how to create one](https://docs.ai.neevcloud.com/getting-started/create-api-key)). No model key is needed: nothing here calls a model.
+- Your [organization and project IDs](https://docs.ai.neevcloud.com/getting-started/org-and-project) (`NEEV_ORG_ID`, `NEEV_PROJECT_ID`)
 
 ## Run it
 
 ```bash
+python3.12 -m venv .venv
+source .venv/bin/activate
 pip install -r requirements.txt
 export NEEV_API_KEY=... NEEV_ORG_ID=... NEEV_PROJECT_ID=...
 python evidence_pack.py --demo
 ```
+
+On Windows, use the PowerShell setup in [Setting up a recipe](../../README.md#setting-up-a-recipe) for the virtualenv and the keys.
 
 `--demo` creates two short-lived sandboxes, does some representative work in them, exports the pack, and deletes the sandboxes. To export your own sandboxes instead, name them:
 

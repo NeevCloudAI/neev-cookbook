@@ -9,10 +9,10 @@ Describe a web app in one sentence. An AI agent builds it inside an isolated Nee
 ## What you need
 
 - Node 20.3 or later
-- A NeevCloud account with two API keys from **Account > API Keys**:
+- A NeevCloud account with two API keys from **Account > API Keys** ([how to create one](https://docs.ai.neevcloud.com/getting-started/create-api-key)):
   - one with Resource Type **Sandboxes** (`NEEV_API_KEY`)
   - one with Resource Type **Model API** (`NEEV_MODEL_API_KEY`)
-- Your organization and project IDs (`NEEV_ORG_ID`, `NEEV_PROJECT_ID`)
+- Your [organization and project IDs](https://docs.ai.neevcloud.com/getting-started/org-and-project) (`NEEV_ORG_ID`, `NEEV_PROJECT_ID`)
 
 ## Run it
 
@@ -21,6 +21,8 @@ npm install
 export NEEV_API_KEY=... NEEV_MODEL_API_KEY=... NEEV_ORG_ID=... NEEV_PROJECT_ID=...
 npm start -- "a pomodoro timer with a calm green theme"
 ```
+
+On Windows, set the keys with the PowerShell lines in [Setting up a recipe](../../README.md#setting-up-a-recipe).
 
 The app stays online for 10 minutes (`--keep 0` to stop as soon as it is up). Press `Ctrl+C` to stop sooner.
 

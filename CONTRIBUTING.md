@@ -47,6 +47,18 @@ written by hand.
 ## Tests
 
 - Unit tests run with no network and no keys: `pytest -q` for Python, `npm test` for TypeScript.
+  Run the Python tests from the recipe's folder, in its own virtualenv:
+
+  ```bash
+  python3.12 -m venv .venv
+  source .venv/bin/activate
+  pip install -r requirements-dev.txt
+  pytest -q
+  ```
+
+  On Windows, create and activate it with `py -3.12 -m venv .venv` and `.venv\Scripts\Activate.ps1`, as in
+  [Setting up a recipe](README.md#setting-up-a-recipe).
+
 - Fakes in `tests/fakes.py` (or `test/fakes.ts`) mirror the real SDK and MCP shapes.
 - Cover the happy path, cleanup on failure, `Ctrl+C`, the step and time limits, malformed tool
   arguments and server refusals, whichever apply.
