@@ -235,3 +235,37 @@ test("fetchStats reads JSON, keeps a non-JSON body as the error, and reports an 
   assert.equal(status, null);
   assert.match(body.error, /^unreachable \(/);
 });
+
+test("interactive: you see the broken app, then the restored one, and your first visit is rolled back", async () => {
+  const sb = new FakeSandbox(); const lines: string[] = []; const prompts: string[] = [];
+  const ask = async (p: string) => {
+    prompts.push(p);
+    if (prompts.length === 1) await sb.stats("https://8000-preview.example"); // you open the broken app
+    return "";
+  };
+  assert.equal(await go(sb, destructiveModel(), lines, { ask }), 0, lines.join("\n"));
+  assert.equal(prompts.length, 2);
+  const out = lines.join("\n");
+  assert.ok(out.indexOf("broken") < out.indexOf("Rolling back"));
+  assert.ok(out.indexOf("Restore proven") < out.lastIndexOf("/stats"));
+});
+
+test("interactive: no second pause when the restore fails", async () => {
+  const sb = new FakeSandbox(undefined, { rollbackRestores: false }); const prompts: string[] = [];
+  assert.equal(await go(sb, destructiveModel(), [], { ask: async (p: string) => { prompts.push(p); return ""; } }), 1);
+  assert.equal(prompts.length, 1);
+});
+
+test("interactive: a prompt that fails, such as on a closed stdin, carries on", async () => {
+  const sb = new FakeSandbox(); const lines: string[] = [];
+  const ask = async () => { throw new Error("readline was closed"); };
+  assert.equal(await go(sb, destructiveModel(), lines, { ask }), 0);
+  assert.ok(lines.some((l) => l.includes("Restore proven")));
+});
+
+test("interactive: Ctrl+C at a prompt deletes the sandbox and exits 130", async () => {
+  const sb = new FakeSandbox(); const ac = new AbortController();
+  const ask = async () => { ac.abort(); throw new Error("aborted"); };
+  assert.equal(await go(sb, destructiveModel(), [], { ask, signal: ac.signal }), 130);
+  assert.ok(sb.deleted);
+});

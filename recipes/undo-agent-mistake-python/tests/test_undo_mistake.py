@@ -227,3 +227,47 @@ def test_a_gateway_blip_after_the_agent_is_not_mistaken_for_damage():
                             fetch=blip, sleep=lambda s: None) == 0
     out = "\n".join(lines)
     assert "The agent left the data alone" in out and "did the damage itself" not in out
+
+
+def test_interactive_shows_you_the_broken_app_then_the_restored_one():
+    sb, lines, prompts = FakeSandbox(), [], []
+
+    def ask(prompt):
+        prompts.append(prompt)
+        if len(prompts) == 1:
+            sb.stats("https://8000-preview.example/stats")  # you open the broken app; the rollback undoes this visit
+        return ""
+
+    assert run(sb, destructive_model(), lines, ask=ask) == 0, lines
+    assert len(prompts) == 2
+    out = "\n".join(lines)
+    # each pause says what to open and what you should see there
+    assert out.index("broken") < out.index("Rolling back") < out.index("Restore proven") < out.rindex("/stats")
+    assert sb.server["served"] == 2  # your visit before the rollback did not survive it
+
+
+def test_interactive_does_not_wait_again_when_the_restore_fails():
+    sb, prompts = FakeSandbox(rollback_restores=False), []
+    assert run(sb, destructive_model(), ask=lambda p: prompts.append(p) or "") == 1
+    assert len(prompts) == 1
+
+
+def test_a_closed_stdin_at_a_pause_carries_on():
+    def closed(prompt):
+        raise EOFError
+    sb, lines = FakeSandbox(), []
+    assert run(sb, destructive_model(), lines, ask=closed) == 0
+    assert any("Restore proven" in l for l in lines)
+
+
+def test_main_waits_for_you_only_on_a_terminal_without_no_wait(monkeypatch):
+    seen = []
+    monkeypatch.setattr(undo_mistake, "run", lambda *a, **kw: seen.append(kw.get("ask")) or 0)
+    for k in undo_mistake.REQUIRED_ENV:
+        monkeypatch.setenv(k, "x")
+    monkeypatch.setattr(undo_mistake.sys.stdin, "isatty", lambda: True)
+    assert undo_mistake.main([]) == 0
+    assert undo_mistake.main(["--no-wait"]) == 0
+    monkeypatch.setattr(undo_mistake.sys.stdin, "isatty", lambda: False)
+    assert undo_mistake.main([]) == 0
+    assert [a is not None for a in seen] == [True, False, False]

@@ -138,11 +138,17 @@ async function proveRestore(sandbox: any, proc: any, [status, body]: Stats, base
 }
 
 // run does the whole demo in one sandbox and always deletes it; returns 0 only when the restore was proven.
+// With `ask`, it waits twice so you can open the app: after the damage, and after the restore is proven.
 export async function run(
   neev: NeevLike, modelClient: ModelLike, model: string, connect: Connect,
-  opts: { log?: (s: string) => void; fetch?: Fetch; wait?: (ms: number) => Promise<void>; clock?: () => number; signal?: AbortSignal } = {},
+  opts: { log?: (s: string) => void; fetch?: Fetch; wait?: (ms: number) => Promise<void>; clock?: () => number; signal?: AbortSignal;
+    ask?: (prompt: string) => Promise<string> } = {},
 ): Promise<number> {
-  const { log = console.log, signal, clock = () => performance.now() } = opts;
+  const { log = console.log, signal, clock = () => performance.now(), ask } = opts;
+  // pause waits for Enter; a prompt that fails, such as on a closed stdin, carries on unless it was Ctrl+C.
+  const pause = async (prompt: string) => {
+    try { await ask?.(prompt); } catch (e) { if (signal?.aborted) throw e; }
+  };
   const wait = opts.wait ?? ((ms: number) => sleep(ms, undefined, { signal }));
   const fetchFn = opts.fetch ?? ((url: string) => fetchStats(url, signal));
   // say prints a numbered step; a Ctrl+C that landed during an SDK call stops the run here.
@@ -182,6 +188,10 @@ export async function run(
       log("   The agent did the damage itself.");
     }
     await showDamage(sandbox, url, stats, log);
+    if (ask) {
+      log(`   See it yourself: open ${url}/stats in a browser. The app is broken: its data is gone.`);
+      await pause("   Press Enter to roll back. ");
+    }
     say("6. Rolling back to the snapshot...");
     started = clock();
     await abortable(sandbox.rollback(snap.id).then(() => sandbox.waitUntilReady({ timeoutMs: 300_000 })));
@@ -194,6 +204,10 @@ export async function run(
       return 1;
     }
     log("Restore proven: the files, the data, the running server and its memory are back.");
+    if (ask) {
+      log(`   Open ${url}/stats again: the same app, with its data back.`);
+      await pause("   Press Enter to finish and delete the sandbox. ");
+    }
     return 0;
   } catch (e) {
     if (signal?.aborted) return 130;
@@ -214,11 +228,14 @@ export async function run(
 
 // main parses arguments, checks the environment, and runs the recipe with Ctrl+C wired to cleanup.
 async function main(): Promise<number> {
+  let noWait = false;
   try {
-    if (parseArgs({ args: process.argv.slice(2), options: { help: { type: "boolean", short: "h" } } }).values.help) {
+    const { values } = parseArgs({ args: process.argv.slice(2), options: { help: { type: "boolean", short: "h" }, "no-wait": { type: "boolean" } } });
+    if (values.help) {
       console.log(DESCRIPTION);
       return 0;
     }
+    noWait = values["no-wait"] ?? false;
   } catch (e) { console.error((e as Error).message); return 2; }
   const missing = missingEnv(process.env);
   if (missing.length) { console.error(`Missing environment variables: ${missing.join(", ")}. See README.md.`); return 2; }
@@ -228,8 +245,16 @@ async function main(): Promise<number> {
   // Keep the handler for repeated presses, so a second Ctrl+C cannot skip the cleanup.
   process.on("SIGINT", () => ac.abort());
   const modelClient = new OpenAI({ baseURL: MODEL_BASE_URL, apiKey: process.env.NEEV_MODEL_API_KEY });
-  return run(new Neev() as unknown as NeevLike, modelClient as unknown as ModelLike, process.env.MODEL ?? DEFAULT_MODEL,
-    mcpConnect(process.env.NEEV_API_KEY!), { signal: ac.signal });
+  // In a terminal, pause for you to open the app. readline swallows Ctrl+C, so route it to the same abort.
+  const rl = process.stdin.isTTY && !noWait ? (await import("node:readline/promises")).createInterface({ input: process.stdin, output: process.stdout }) : undefined;
+  rl?.on("SIGINT", () => ac.abort());
+  const ask = rl ? (prompt: string) => rl.question(prompt, { signal: ac.signal }) : undefined;
+  try {
+    return await run(new Neev() as unknown as NeevLike, modelClient as unknown as ModelLike, process.env.MODEL ?? DEFAULT_MODEL,
+      mcpConnect(process.env.NEEV_API_KEY!), { signal: ac.signal, ask });
+  } finally {
+    rl?.close();
+  }
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {

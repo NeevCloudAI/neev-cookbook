@@ -20,6 +20,8 @@ python undo_mistake.py
 
 On Windows, see the [setup guide](../../docs/setup.md#windows).
 
+**See it for yourself.** In a terminal, the script pauses twice and prints the app's URL: once after the agent's damage, so you can open it and see the app fail with its data gone, and once after the rollback, so you can open the same URL and see the data back. Press Enter to go on. With `--no-wait`, or with no terminal (as in CI), it runs straight through.
+
 The script exits 0 only when every check after the rollback passes.
 
 ## How it works
