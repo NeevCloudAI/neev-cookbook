@@ -30,16 +30,23 @@ Each folder is self-contained: its own dependencies, its own tests, no shared he
 
 ## README
 
-Every recipe README follows the same order:
+Write every recipe README for a customer deciding whether the recipe fits their product. Use the same
+order as the existing recipes:
 
-1. One sentence on the problem.
-2. A screenshot or a block of real output.
-3. What you need: Python 3.11+ or Node 20.3+, and the keys (Resource Type **Sandboxes** for
-   `NEEV_API_KEY`, **Model API** for `NEEV_MODEL_API_KEY`).
-4. Run it: install, export the keys, run.
-5. How it works: about five numbered steps naming the SDK and MCP calls.
-6. Time and cost, measured.
-7. The cleanup guarantee.
+1. **Title and one or two sentences:** the problem, and what the recipe gives you.
+2. **A GIF of a real run**, plus any result it produced, such as a chart, a page or a screenshot.
+   Record it with a terminal recorder such as [vhs](https://github.com/charmbracelet/vhs), set the keys
+   off camera, and check no key, account ID or local path is visible. Save it as
+   `assets/runs/<recipe>.gif`.
+3. **Run it:** one line on what you need, then install, export the keys and run. Say what success looks
+   like and link the [setup guide](docs/setup.md#windows) for Windows.
+4. **How it works:** three to five numbered steps in plain language, naming only the key SDK or MCP call.
+   Leave out internals such as paging, retries and field names.
+5. **Use it in your product:** a few bullets on what to copy or change, each pointing at a real function
+   or constant in the recipe's code.
+6. **Good to know:** limits, guarantees and known gaps, one line each.
+7. **Time and cost:** measured times, the agent's limits, what you pay for, and the cleanup guarantee
+   with the prefix of a leftover sandbox.
 
 Only claim what you observed on a real run. Output in a README or a pull request is pasted, never
 written by hand.
