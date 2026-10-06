@@ -5,8 +5,8 @@ Your product lets end users run their own Python or JavaScript. This recipe is t
 ## What you need
 
 - Node 20 or later
-- A NeevCloud API key with Resource Type **Sandboxes** (`NEEV_API_KEY`), from **Account > API Keys**
-- Your organization and project IDs (`NEEV_ORG_ID`, `NEEV_PROJECT_ID`)
+- A NeevCloud API key with Resource Type **Sandboxes** (`NEEV_API_KEY`), from **Account > API Keys** ([how to create one](https://docs.ai.neevcloud.com/getting-started/create-api-key))
+- Your [organization and project IDs](https://docs.ai.neevcloud.com/getting-started/org-and-project) (`NEEV_ORG_ID`, `NEEV_PROJECT_ID`)
 
 No model key is needed: nothing here calls a model.
 
@@ -17,6 +17,8 @@ npm install
 export NEEV_API_KEY=... NEEV_ORG_ID=... NEEV_PROJECT_ID=...
 npm run demo
 ```
+
+On Windows, set the keys with the PowerShell lines in [Setting up a recipe](../../README.md#setting-up-a-recipe).
 
 The demo starts the server, sends it ordinary and hostile code as two users, checks that each run was contained, waits for the idle timeout to delete both sandboxes, and asks the API to confirm they are gone. It exits `0` only when every check passed and every sandbox was deleted.
 

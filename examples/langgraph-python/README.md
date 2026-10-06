@@ -20,6 +20,8 @@ taking the model's word for it.
 ## Run it
 
 ```bash
+python3.12 -m venv .venv
+source .venv/bin/activate
 pip install -r requirements.txt
 
 export NEEV_API_KEY=...            # from the NeevCloud console
@@ -28,6 +30,8 @@ export NEEV_MODEL_API_KEY=...
 
 python multi_agent_sandboxes.py
 ```
+
+On Windows, use the PowerShell setup in [Setting up a recipe](../../README.md#setting-up-a-recipe) for the virtualenv and the keys.
 
 Optional: `NEEV_REGION` (defaults to `as-south-1`) and `NEEV_MODEL` (defaults to `glm-4-7`).
 

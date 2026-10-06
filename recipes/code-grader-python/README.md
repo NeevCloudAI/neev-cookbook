@@ -23,17 +23,21 @@ Done: 6 submissions graded, all match the key, 6 sandboxes created and deleted.
 ## What you need
 
 - Python 3.11 or later
-- A NeevCloud account with an API key from **Account > API Keys** with Resource Type **Sandboxes** (`NEEV_API_KEY`)
-- Your organization and project IDs (`NEEV_ORG_ID`, `NEEV_PROJECT_ID`)
+- A NeevCloud account with an API key from **Account > API Keys** ([how to create one](https://docs.ai.neevcloud.com/getting-started/create-api-key)) with Resource Type **Sandboxes** (`NEEV_API_KEY`)
+- Your [organization and project IDs](https://docs.ai.neevcloud.com/getting-started/org-and-project) (`NEEV_ORG_ID`, `NEEV_PROJECT_ID`)
 - Only for `--feedback`: a second key with Resource Type **Model API** (`NEEV_MODEL_API_KEY`)
 
 ## Run it
 
 ```bash
+python3.12 -m venv .venv
+source .venv/bin/activate
 pip install -r requirements.txt
 export NEEV_API_KEY=... NEEV_ORG_ID=... NEEV_PROJECT_ID=...
 python grader.py              # add --feedback (and NEEV_MODEL_API_KEY) for a hint per failing submission
 ```
+
+On Windows, use the PowerShell setup in [Setting up a recipe](../../README.md#setting-up-a-recipe) for the virtualenv and the keys.
 
 The grades go to `results.json` (change it with `--out`). The script exits 0 only when every submission was graded, every grade matches the answer key in `expected.json`, and every sandbox was deleted.
 

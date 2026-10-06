@@ -40,24 +40,28 @@ Task verified: OpenCode fixed slugify.js, the tests pass, and the agent kept its
 ## What you need
 
 - Python 3.11 or later
-- A NeevCloud account with two API keys from **Account > API Keys**:
+- A NeevCloud account with two API keys from **Account > API Keys** ([how to create one](https://docs.ai.neevcloud.com/getting-started/create-api-key)):
   - one with Resource Type **Sandboxes** (`NEEV_API_KEY`)
   - one with Resource Type **Model API** (`NEEV_MODEL_API_KEY`), which OpenCode uses to call the model
-- Your organization and project IDs (`NEEV_ORG_ID`, `NEEV_PROJECT_ID`)
+- Your [organization and project IDs](https://docs.ai.neevcloud.com/getting-started/org-and-project) (`NEEV_ORG_ID`, `NEEV_PROJECT_ID`)
 
 ## Run it
 
 ```bash
+python3.12 -m venv .venv
+source .venv/bin/activate
 pip install -r requirements.txt
 export NEEV_API_KEY=... NEEV_MODEL_API_KEY=... NEEV_ORG_ID=... NEEV_PROJECT_ID=...
 python hosted_agent.py
 ```
 
+On Windows, use the PowerShell setup in [Setting up a recipe](../../README.md#setting-up-a-recipe) for the virtualenv and the keys.
+
 The script exits 0 only when every check passes: the test file is unchanged, the tests pass after the agent's fix, and after the resume the agent is the same running machine and the tests still pass.
 
 ## What a hosted agent adds over a plain sandbox
 
-An agent is a sandbox started from an agent template. `client.agent_templates.list()` shows the catalogue; this recipe uses `opencode`, which works with NeevCloud models. The Claude Code and Codex CLI templates need an Anthropic or OpenAI key instead.
+An agent is a sandbox started from an agent template ([Agents](https://docs.ai.neevcloud.com/agentic-studio/overview-1) in the docs). `client.agent_templates.list()` shows the catalogue; this recipe uses `opencode`, which works with NeevCloud models. The Claude Code and Codex CLI templates need an Anthropic or OpenAI key instead.
 
 - The coding CLI is already installed and pinned to the template's version, so the script only uploads a project and a config file.
 - The template comes with an egress allow-list for its model providers and package registries. The recipe narrows it to the one host it needs with `allow_egress=["inference.ai.neevcloud.com"]`.

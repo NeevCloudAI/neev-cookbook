@@ -7,18 +7,22 @@ restart. A denied request goes back to the agent as a refusal, and the host is n
 ## What you need
 
 - Python 3.11 or later
-- A NeevCloud account with two API keys from **Account > API Keys**:
+- A NeevCloud account with two API keys from **Account > API Keys** ([how to create one](https://docs.ai.neevcloud.com/getting-started/create-api-key)):
   - one with Resource Type **Sandboxes** (`NEEV_API_KEY`)
   - one with Resource Type **Model API** (`NEEV_MODEL_API_KEY`)
-- Your organization and project IDs (`NEEV_ORG_ID`, `NEEV_PROJECT_ID`)
+- Your [organization and project IDs](https://docs.ai.neevcloud.com/getting-started/org-and-project) (`NEEV_ORG_ID`, `NEEV_PROJECT_ID`)
 
 ## Run it
 
 ```bash
+python3.12 -m venv .venv
+source .venv/bin/activate
 pip install -r requirements.txt
 export NEEV_API_KEY=... NEEV_MODEL_API_KEY=... NEEV_ORG_ID=... NEEV_PROJECT_ID=...
 python egress_approval.py
 ```
+
+On Windows, use the PowerShell setup in [Setting up a recipe](../../README.md#setting-up-a-recipe) for the virtualenv and the keys.
 
 The default task needs two hosts: `api.github.com` for a repository's latest release and `pypi.org` to
 compare the version. Approve one and deny the other to see both paths. Pass your own task as an argument,

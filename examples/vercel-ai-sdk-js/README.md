@@ -15,6 +15,8 @@ export NEEV_MODEL_API_KEY=...
 npm start
 ```
 
+On Windows, set the keys with the PowerShell lines in [Setting up a recipe](../../README.md#setting-up-a-recipe).
+
 The model endpoint defaults to `https://inference.ai.neevcloud.com/v1`; override
 it with `NEEV_MODEL_BASE_URL` for any other OpenAI-compatible provider.
 

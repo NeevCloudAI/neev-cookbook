@@ -2,22 +2,67 @@
 
 Recipes for building AI agents you can trust with a real computer. Every recipe runs on [NeevCloud](https://neevcloud.com) sandboxes, isolated Linux machines with an MCP server, a command audit trail, network egress you control, and memory snapshots you can roll back, plus NeevCloud's own models.
 
-Each recipe runs as written: one install, one command, and one or two API keys.
+Each recipe runs as written: one install, one command, and one or two API keys. For the full product documentation, see [docs.ai.neevcloud.com](https://docs.ai.neevcloud.com/).
+
+## Prerequisites
+
+- **A NeevCloud account** with two API keys from **Account > API Keys** in the console ([how to create one](https://docs.ai.neevcloud.com/getting-started/create-api-key)): one with Resource Type **Sandboxes** (`NEEV_API_KEY`) and one with Resource Type **Model API** (`NEEV_MODEL_API_KEY`), plus your [organization and project IDs](https://docs.ai.neevcloud.com/getting-started/org-and-project) (`NEEV_ORG_ID`, `NEEV_PROJECT_ID`).
+- **Python 3.11 or later** for the Python recipes and examples.
+- **Node 20.3 or later** for the TypeScript recipes and examples, from [nodejs.org](https://nodejs.org/en/download) on any system.
+- **Git**, to clone the repository.
+
+### Installing Python
+
+Check what you have with `python3 --version` (on Windows, `py --version`). If it is older than 3.11, install Python 3.12:
+
+- **macOS**: the installer from [python.org](https://www.python.org/downloads/macos/). The Python built into macOS is too old.
+- **Linux**: Ubuntu 24.04 and later already have it; add the venv module with `sudo apt install python3.12-venv`. On Fedora, `sudo dnf install python3.12`. Older distributions that ship Python 3.11 work too: use `python3.11` wherever the commands below say `python3.12`.
+- **Windows**: the installer from [python.org](https://www.python.org/downloads/windows/), or `winget install Python.Python.3.12`.
+
+### Setting up a recipe
+
+Each recipe installs its packages into its own virtualenv in its folder, so they never mix with your system Python. Once the virtualenv is active, `python` and `pip` are the virtualenv's own on every system.
+
+macOS and Linux:
+
+```bash
+python3.12 -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+export NEEV_API_KEY=... NEEV_MODEL_API_KEY=... NEEV_ORG_ID=... NEEV_PROJECT_ID=...
+```
+
+Windows (PowerShell):
+
+```powershell
+py -3.12 -m venv .venv
+.venv\Scripts\Activate.ps1
+pip install -r requirements.txt
+$env:NEEV_API_KEY = "..."; $env:NEEV_MODEL_API_KEY = "..."; $env:NEEV_ORG_ID = "..."; $env:NEEV_PROJECT_ID = "..."
+```
+
+If PowerShell refuses to run `Activate.ps1`, allow local scripts once with `Set-ExecutionPolicy -Scope CurrentUser RemoteSigned`. TypeScript recipes need no virtualenv: run `npm install` in the recipe's folder instead.
+
+The recipe READMEs show the macOS and Linux commands. On Windows, use the PowerShell lines above for the setup and the keys, then run the recipe's own command as written.
 
 ## Quickstart
 
-1. In the NeevCloud console, open **Account > API Keys** and create two keys in your project: one with Resource Type **Sandboxes** and one with Resource Type **Model API**. Note your organization and project IDs.
-2. Run the flagship recipe. It needs Python 3.11 or later:
+1. Create the two API keys and note the IDs listed under [Prerequisites](#prerequisites).
+2. Run the flagship recipe (on Windows, swap in the PowerShell setup above):
 
 ```bash
 git clone https://github.com/NeevCloudAI/neev-cookbook.git
 cd neev-cookbook/recipes/prompt-to-live-app-python
+python3.12 -m venv .venv
+source .venv/bin/activate
 pip install -r requirements.txt
 export NEEV_API_KEY=... NEEV_MODEL_API_KEY=... NEEV_ORG_ID=... NEEV_PROJECT_ID=...
 python app_builder.py "a pomodoro timer with a calm green theme"
 ```
 
 In about a minute you get a public URL to an app an agent built inside a sandbox. Every recipe works the same way: its README lists what it needs, and it deletes everything it creates when it ends.
+
+If `pip install` fails with `No matching distribution found for neevai`, pip is running on a Python older than 3.10, such as the one built into macOS. Set up the virtualenv with Python 3.11 or later, as above, and install again inside it.
 
 <p align="center">
   <img src="assets/prompt-to-live-app.png" alt="The pomodoro timer the agent built from the quickstart command, open on its public preview URL" width="560">
@@ -118,13 +163,15 @@ That single connection carries the whole surface — create a sandbox, run
 commands, read and write files, start and manage processes, expose ports,
 snapshot, and roll back. The sandbox name binds the connection to one machine, so
 giving each agent its own name gives each agent its own isolated environment.
+[MCP setup](https://docs.ai.neevcloud.com/getting-started/mcp/overview) in the docs covers the server and how to
+connect [Cursor](https://docs.ai.neevcloud.com/getting-started/mcp/connect-cursor) and [Codex](https://docs.ai.neevcloud.com/getting-started/mcp/connect-codex).
 
 The SDKs and the CLI are the other way in if you would rather call the platform
 directly:
 
 - [neev-sdk-python](https://github.com/NeevCloudAI/neev-sdk-python)
 - [neev-sdk-js](https://github.com/NeevCloudAI/neev-sdk-js)
-- [neev-cli](https://github.com/NeevCloudAI/neev-cli)
+- [neev-cli](https://github.com/NeevCloudAI/neev-cli) ([docs](https://docs.ai.neevcloud.com/getting-started/neev-cli))
 
 ## Models
 
@@ -143,7 +190,7 @@ curl https://inference.ai.neevcloud.com/v1/chat/completions \
   -d '{"model": "glm-4-7", "messages": [{"role": "user", "content": "hello"}]}'
 ```
 
-Use an API key with Resource Type **Model API**. A Sandboxes key is not accepted by the model endpoint.
+Use an API key with Resource Type **Model API**. A Sandboxes key is not accepted by the model endpoint. See the [Model API docs](https://docs.ai.neevcloud.com/ai-inference/overview-1) for authentication, limits and pricing.
 
 Available models: `glm-5-2`, `glm-4-7`, `deepseek-v3-2`, `kimi-k3`, `minimax-m3`,
 `minimax-m2.7`, `minimax-m2.7-highspeed`, `gpt-oss-120b`, `gpt-oss-20b`,
@@ -155,13 +202,15 @@ a low `max_tokens` returns an empty message and no tool call.
 
 ## What a sandbox gives you
 
+The [Sandbox docs](https://docs.ai.neevcloud.com/agentic-studio/overview) cover each of these in detail.
+
 - **Root on a real machine.** Install packages, run servers, keep a filesystem.
 - **A network boundary you control.** Egress denies everything by default; you
-  allow the domains your agent actually needs.
+  allow the domains your agent actually needs ([Internet access and egress](https://docs.ai.neevcloud.com/agentic-studio/overview/internet-access)).
 - **Pause and resume.** Pause a sandbox between bursts of work and resume it with
   its files, memory and running processes as they were.
 - **Snapshot and rewind.** Capture a sandbox, fork it, or roll it back when an
-  agent breaks something.
+  agent breaks something ([Snapshots](https://docs.ai.neevcloud.com/agentic-studio/overview/snapshots)).
 - **An audit trail.** Every operation (a command, a file read or write, a process
   start) is recorded against the key that ran it, without its arguments, so the
   trail is safe to keep.

@@ -3,6 +3,8 @@
 The smallest useful thing: create a sandbox, run a command, delete it.
 
 ```bash
+python3.12 -m venv .venv
+source .venv/bin/activate
 pip install -r requirements.txt
 
 export NEEV_API_KEY=...
@@ -11,6 +13,8 @@ export NEEV_PROJECT_ID=...
 
 python hello_world.py
 ```
+
+On Windows, use the PowerShell setup in [Setting up a recipe](../../README.md#setting-up-a-recipe) for the virtualenv and the keys.
 
 Output:
 
