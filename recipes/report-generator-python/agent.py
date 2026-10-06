@@ -23,7 +23,8 @@ SYSTEM_PROMPT = (
     "Write every piece of code to a .py file with fs_write and run it with exec "
     '(program "python3", args ["<file>.py"]); never pass code with python3 -c. '
     "Keep each script short and plain, without comments, and replace a broken script whole rather than "
-    "appending to it. Build the report with two scripts:\n"
+    "appending to it. Run every script with exec right after you write it, and only rewrite it after a run "
+    "has shown what is wrong. Build the report with two scripts:\n"
     "1. build_xlsx.py writes report.xlsx with openpyxl: a sheet named Data with every row of data.csv, and a "
     "sheet named Summary whose totals are Excel formulas over the Data sheet, such as "
     "=SUMIFS(Data!E:E,Data!B:B,A2).\n"
@@ -40,6 +41,8 @@ SYSTEM_PROMPT = (
 BAD_ARGUMENTS = ("error: the arguments were not valid JSON ({}); check the brackets and quotes, and put code in "
                  "a file with fs_write instead of passing it inline")
 NO_FINDINGS = "error: findings are empty; call finish with your key findings"
+NOT_RUN = ("\nnote: {path} has not run since you last wrote it. Run it with exec (program \"python3\", "
+           "args [\"{path}\"]) and fix what the run shows, instead of rewriting it again.")
 
 
 class AgentFailed(Exception):
@@ -101,6 +104,21 @@ def _describe(args: dict) -> str:
     return str(args.get("path") or "")
 
 
+def _track_runs(unrun: set[str], name: str, args: dict) -> str:
+    """Tracks scripts written but not yet run; returns a reminder when one is rewritten before it ever ran."""
+    if name == "exec":
+        command = " ".join([str(args.get("program") or ""), *map(str, args.get("args") or [])])
+        unrun.difference_update({p for p in unrun if p.rsplit("/", 1)[-1] in command})
+        return ""
+    path = str(args.get("path") or "")
+    if name != "fs_write" or not path.endswith(".py"):
+        return ""
+    if path in unrun:
+        return NOT_RUN.format(path=path)
+    unrun.add(path)
+    return ""
+
+
 async def _out_of_budget(check, reason: str, log) -> str:
     """Ends a run that hit a limit: keep the reports if they already pass the check, otherwise fail."""
     problem = await check()
@@ -120,6 +138,7 @@ async def build_report(session, model_client, model: str, request: str, check, m
     allowed = {t["function"]["name"] for t in tools}
     messages = [{"role": "system", "content": SYSTEM_PROMPT}, {"role": "user", "content": request}]
     nudged = False
+    unrun: set[str] = set()  # scripts written since they last ran
     start = time.monotonic()
 
     def time_left() -> float:
@@ -169,5 +188,6 @@ async def build_report(session, model_client, model: str, request: str, check, m
             else:
                 log(f"   step {step}: {name} {_describe(args)}".rstrip())
                 result = await call_tool(session, name, args, max(time_left(), 0.1))
+                result += _track_runs(unrun, name, args)
             messages.append({"role": "tool", "tool_call_id": call.id, "content": result})
     return await _out_of_budget(check, f"step limit of {max_steps} reached", log)
