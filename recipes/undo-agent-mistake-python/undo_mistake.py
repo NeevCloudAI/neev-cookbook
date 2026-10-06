@@ -160,9 +160,20 @@ def _root_cause(e: BaseException) -> BaseException:
     return e
 
 
+def _pause(ask, prompt: str) -> None:
+    """Waits for Enter so you can look at the app; a closed stdin carries on as an unattended run would."""
+    try:
+        ask(prompt)
+    except EOFError:
+        pass
+
+
 def run(client, model_client, model: str, connect, log=print, fetch=fetch_stats,
-        sleep=time.sleep, clock=time.monotonic) -> int:
-    """Runs the whole demo in one sandbox and always deletes it; returns 0 only when the restore was proven."""
+        sleep=time.sleep, clock=time.monotonic, ask=None) -> int:
+    """Runs the whole demo in one sandbox and always deletes it; returns 0 only when the restore was proven.
+
+    With `ask`, it waits twice so you can open the app: after the damage, and after the restore is proven.
+    """
     sandbox = None
     try:
         log("1. Creating a sandbox (no internet access)...")
@@ -190,6 +201,9 @@ def run(client, model_client, model: str, connect, log=print, fetch=fetch_stats,
         else:
             log("   The agent did the damage itself.")
         show_damage(sandbox, url, status, body, log)
+        if ask is not None:
+            log(f"   See it yourself: open {url}/stats in a browser. The app is broken: its data is gone.")
+            _pause(ask, "   Press Enter to roll back. ")
         log("6. Rolling back to the snapshot...")
         started = clock()
         sandbox.rollback(snap.id)
@@ -202,6 +216,9 @@ def run(client, model_client, model: str, connect, log=print, fetch=fetch_stats,
             log("The rollback did not restore everything.")
             return 1
         log("Restore proven: the files, the data, the running server and its memory are back.")
+        if ask is not None:
+            log(f"   Open {url}/stats again: the same app, with its data back.")
+            _pause(ask, "   Press Enter to finish and delete the sandbox. ")
         return 0
     except KeyboardInterrupt:
         return 130
@@ -220,7 +237,10 @@ def run(client, model_client, model: str, connect, log=print, fetch=fetch_stats,
 
 def main(argv=None) -> int:
     """Parses arguments, checks the environment, and runs the recipe."""
-    argparse.ArgumentParser(description=__doc__).parse_args(argv)
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--no-wait", action="store_true",
+                        help="run straight through without pausing for you to open the app (the default with no terminal)")
+    args = parser.parse_args(argv)
     missing = missing_env(os.environ)
     if missing:
         print(f"Missing environment variables: {', '.join(missing)}. See README.md.", file=sys.stderr)
@@ -231,7 +251,8 @@ def main(argv=None) -> int:
     model_client = AsyncOpenAI(base_url=MODEL_BASE_URL, api_key=os.environ["NEEV_MODEL_API_KEY"])
     connect = mcp_connect(os.environ["NEEV_API_KEY"])
     with NeevAI() as client:
-        return run(client, model_client, os.environ.get("MODEL", DEFAULT_MODEL), connect)
+        ask = input if sys.stdin.isatty() and not args.no_wait else None
+        return run(client, model_client, os.environ.get("MODEL", DEFAULT_MODEL), connect, ask=ask)
 
 
 if __name__ == "__main__":
