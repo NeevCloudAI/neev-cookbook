@@ -4,6 +4,10 @@ Recipes for building AI agents you can trust with a real computer. Every recipe 
 
 Each recipe runs as written: one install, one command, and one or two API keys. For the full product documentation, see [docs.ai.neevcloud.com](https://docs.ai.neevcloud.com/).
 
+<p align="center">
+  <img src="assets/runs/prompt-to-live-app-python.gif" alt="A real run of the quickstart recipe: an agent builds an app in a sandbox and publishes it on a URL" width="720">
+</p>
+
 ## Prerequisites
 
 - Two NeevCloud API keys, one **Sandboxes** and one **Model API** ([create a key](https://docs.ai.neevcloud.com/getting-started/create-api-key))
@@ -110,8 +114,8 @@ Use NeevCloud sandboxes from the agent framework you already have.
 
 ## Connecting
 
-There is no CLI to install and no bridge process to run. Any MCP client connects
-with a URL and an API key:
+Any MCP client, such as Claude Code, Cursor or Codex, connects with a URL and an API key. There is
+nothing to install and no bridge process to run:
 
 ```
 https://mcp.sandboxes.as-south-1.ai.neevcloud.com/mcp
@@ -124,9 +128,8 @@ Authorization: Bearer <NEEV_API_KEY>
 x-sandbox-name: my-agent
 ```
 
-That single connection carries the whole surface — create a sandbox, run
-commands, read and write files, start and manage processes, expose ports,
-snapshot, and roll back. The sandbox name binds the connection to one machine, so
+That one connection covers everything: create a sandbox, run commands, read
+and write files, start and manage processes, expose ports, snapshot, and roll back. The sandbox name binds the connection to one machine, so
 giving each agent its own name gives each agent its own isolated environment.
 [MCP setup](https://docs.ai.neevcloud.com/getting-started/mcp/overview) in the docs covers the server and how to
 connect [Cursor](https://docs.ai.neevcloud.com/getting-started/mcp/connect-cursor) and [Codex](https://docs.ai.neevcloud.com/getting-started/mcp/connect-codex).
@@ -157,19 +160,19 @@ curl https://inference.ai.neevcloud.com/v1/chat/completions \
 
 Use an API key with Resource Type **Model API**. A Sandboxes key is not accepted by the model endpoint. See the [Model API docs](https://docs.ai.neevcloud.com/ai-inference/overview-1) for authentication, limits and pricing.
 
-Available models: `glm-5-2`, `glm-4-7`, `deepseek-v3-2`, `kimi-k3`, `minimax-m3`,
+Models available when this was written: `glm-5-2`, `glm-4-7`, `deepseek-v3-2`, `kimi-k3`, `minimax-m3`,
 `minimax-m2.7`, `minimax-m2.7-highspeed`, `gpt-oss-120b`, `gpt-oss-20b`,
-`llama-3.3-70b-versatile`, `llama-3.1-8b-instant`, `gemma-4-31b`.
+`llama-3.3-70b-versatile`, `llama-3.1-8b-instant`, `gemma-4-31b`. The Model API docs have the current list.
 
 The recipes default to `glm-4-7`, which answers tool calls quickly and reliably. Set `MODEL` to try
-another (`--models` in the eval rollouts recipe, `NEEV_MODEL` in the framework examples). Reasoning models spend tokens thinking before they answer. Give them headroom —
+another (`--models` in the eval rollouts recipe, `NEEV_MODEL` in the framework examples). Reasoning models spend tokens thinking before they answer, so give them headroom:
 a low `max_tokens` returns an empty message and no tool call.
 
 ## What a sandbox gives you
 
 The [Sandbox docs](https://docs.ai.neevcloud.com/agentic-studio/overview) cover each of these in detail.
 
-- **Root on a real machine.** Install packages, run servers, keep a filesystem.
+- **A full Linux machine with root.** Install packages, run servers, keep a filesystem.
 - **A network boundary you control.** Egress denies everything by default; you
   allow the domains your agent actually needs ([Internet access and egress](https://docs.ai.neevcloud.com/agentic-studio/overview/internet-access)).
 - **Pause and resume.** Pause a sandbox between bursts of work and resume it with
@@ -186,7 +189,7 @@ The [Sandbox docs](https://docs.ai.neevcloud.com/agentic-studio/overview) cover 
 recipes/      one folder per recipe, each self-contained with its own README and tests
 examples/     framework integrations and short single-feature examples
 docs/         the setup guide for macOS, Linux and Windows
-assets/       screenshots used by the READMEs
+assets/       screenshots and run recordings used by the READMEs
 .github/      issue and pull request templates, and the nightly check that runs every recipe
 ```
 

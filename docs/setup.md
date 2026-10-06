@@ -14,7 +14,7 @@ In the NeevCloud console, open **Account > API Keys** and create:
 - a key with Resource Type **Sandboxes**, used as `NEEV_API_KEY`
 - a key with Resource Type **Model API**, used as `NEEV_MODEL_API_KEY`
 
-Note your organization and project IDs too (`NEEV_ORG_ID`, `NEEV_PROJECT_ID`).
+Note your organization and project IDs too (`NEEV_ORG_ID`, `NEEV_PROJECT_ID`). Some recipes need only the Sandboxes key; each README says which.
 
 Docs: [Create an API key](https://docs.ai.neevcloud.com/getting-started/create-api-key) · [Organizations and projects](https://docs.ai.neevcloud.com/getting-started/org-and-project)
 
@@ -44,7 +44,7 @@ If Python is too old, install a current one:
 
 For Node, use the installer from [nodejs.org](https://nodejs.org/en/download) on any system.
 
-The commands below use `python3.12`. If you installed another version, use its name instead, such as `python3.14`.
+The commands below use `python3.12` (on Windows, `py -3.12`). If you installed another version, use its name instead, such as `python3.14` or `py -3.14`.
 
 ## 3. Set up a recipe
 
