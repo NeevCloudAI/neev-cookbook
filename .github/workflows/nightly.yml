@@ -46,6 +46,7 @@ jobs:
     outputs:
       matrix: ${{ steps.pick.outputs.matrix }}
     steps:
+      - uses: actions/checkout@v4
       - id: pick
         env:
           FILTER: ${{ inputs.recipes }}
@@ -86,7 +87,12 @@ jobs:
           unknown = sorted(set(wanted) - {r["name"] for r in recipes})
           if unknown:
               raise SystemExit(f"unknown recipes: {' '.join(unknown)}")
-          picked = [r for r in recipes if not wanted or r["name"] in wanted]
+          # A recipe listed here before its folder lands on this branch is skipped, not failed.
+          present = [r for r in recipes if os.path.isdir(os.path.join("recipes", r["name"]))]
+          absent = sorted(set(wanted) - {r["name"] for r in present})
+          if absent:
+              raise SystemExit(f"not on this branch: {' '.join(absent)}")
+          picked = [r for r in present if not wanted or r["name"] in wanted]
           print("matrix=" + json.dumps({"include": picked}))
           PY
 
