@@ -12,6 +12,10 @@ The server shipped here (`untrusted_server.py`) is a deliberate stand-in for a m
 plants only dummy secrets, and the sandbox's denied egress is what actually stops anything leaving,
 so running it is safe.
 
+<p align="center">
+  <img src="../../assets/runs/quarantine-mcp-server-python.gif" alt="A real run of this recipe, recorded in a terminal" width="720">
+</p>
+
 ## What you need
 
 - Python 3.11 or later

@@ -2,6 +2,10 @@
 
 Run a coding agent on NeevCloud instead of your laptop, give it a task from a script, and check its work yourself. This recipe starts OpenCode from a ready-made agent template, has it fix a failing test suite with a NeevCloud model, verifies the fix, prints the audit trail, then pauses and resumes the agent to show it keeps its work.
 
+<p align="center">
+  <img src="../../assets/runs/hosted-agent-python.gif" alt="A real run of this recipe, recorded in a terminal" width="720">
+</p>
+
 ```text
 1. Creating an agent from the opencode template (it can reach only the NeevCloud model API)...
    hosted-agent-a1c05545 Ready in 9s

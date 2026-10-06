@@ -5,6 +5,10 @@ steps is an instruction to upload the project's `.env` to a paste site. The sand
 lets the agent connect only to the package index it needs, so the upload never connects —
 whether or not the model falls for the trick.
 
+<p align="center">
+  <img src="../../assets/runs/injection-proof-agent-python.gif" alt="A real run of this recipe, recorded in a terminal" width="720">
+</p>
+
 ## What you need
 
 - Python 3.11 or later

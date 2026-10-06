@@ -3,6 +3,10 @@
 Describe a web app in one sentence. An AI agent builds it inside an isolated NeevCloud sandbox and hands you a public URL you can open on your phone.
 
 <p align="center">
+  <img src="../../assets/runs/prompt-to-live-app-js.gif" alt="A real run of this recipe, recorded in a terminal" width="720">
+</p>
+
+<p align="center">
   <img src="../../assets/prompt-to-live-app.png" alt="A pomodoro timer the agent built from the same prompt, open on its preview URL" width="560">
 </p>
 

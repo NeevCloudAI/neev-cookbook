@@ -5,6 +5,10 @@ malicious package runs code at install time that reads a local secret and tries 
 server — but that server is off the allow-list, so the connection never opens. A legitimate
 `pip install` from PyPI succeeds through the same allow-list.
 
+<p align="center">
+  <img src="../../assets/runs/supply-chain-safe-installs-python.gif" alt="A real run of this recipe, recorded in a terminal" width="720">
+</p>
+
 ## What you need
 
 - Python 3.11 or later

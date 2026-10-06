@@ -3,6 +3,10 @@
 Turn a CSV into a finished business report, a PDF and an Excel workbook, without installing a PDF or spreadsheet toolchain on your machine. An AI agent writes and runs the report code inside an isolated NeevCloud sandbox, and the script downloads both files.
 
 <p align="center">
+  <img src="../../assets/runs/report-generator-python.gif" alt="A real run of this recipe, recorded in a terminal" width="720">
+</p>
+
+<p align="center">
   <img src="../../assets/report-generator.png" alt="Page 1 of the expense report the agent built from the bundled sample data" width="420">
 </p>
 

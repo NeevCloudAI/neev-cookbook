@@ -2,6 +2,10 @@
 
 A long job fails part-way and rerunning it costs minutes and may not even hit the bug again. Snapshot the sandbox the moment it fails, fork it, and let an AI agent investigate the fork while the failed process is still running with its memory intact.
 
+<p align="center">
+  <img src="../../assets/runs/debug-at-failure-python.gif" alt="A real run of this recipe, recorded in a terminal" width="720">
+</p>
+
 ```text
 1. Creating a sandbox for the job (no internet access)...
 2. Running a 3-stage order pipeline over 240 records as a background process...

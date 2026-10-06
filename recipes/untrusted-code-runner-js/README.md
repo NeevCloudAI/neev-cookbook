@@ -2,6 +2,10 @@
 
 Your product lets end users run their own Python or JavaScript. This recipe is the backend for that: a small HTTP server that runs each user's code in that user's own NeevCloud sandbox, with no network, hard memory, process and time limits, and the sandbox deleted when the user goes idle.
 
+<p align="center">
+  <img src="../../assets/runs/untrusted-code-runner-js.gif" alt="A real run of this recipe, recorded in a terminal" width="720">
+</p>
+
 ## What you need
 
 - Node 20 or later

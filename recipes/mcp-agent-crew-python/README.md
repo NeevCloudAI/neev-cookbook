@@ -2,6 +2,10 @@
 
 Point several agents at one MCP server without telling them apart and they share one machine and one identity: one agent can overwrite another's work, and afterwards nobody can tell who did what. Here a planner, a coder and a tester connect to the same NeevCloud Sandbox MCP URL, but each gets its own sandbox and its own API key, and the audit trail shows which agent did each thing.
 
+<p align="center">
+  <img src="../../assets/runs/mcp-agent-crew-python.gif" alt="A real run of this recipe, recorded in a terminal" width="720">
+</p>
+
 ## What you need
 
 - Python 3.11 or later

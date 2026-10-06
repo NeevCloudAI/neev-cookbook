@@ -2,6 +2,10 @@
 
 A long-lived agent spends most of its life waiting for the next batch of work. Pause its sandbox between bursts and it stops using compute, then resume it in a few seconds with the same running process and everything that process held in memory, so an agent can live for days while running only when there is work.
 
+<p align="center">
+  <img src="../../assets/runs/agent-that-sleeps-python.gif" alt="A real run of this recipe, recorded in a terminal" width="720">
+</p>
+
 ```text
 3. Burst 1: asking glm-4-7 to triage 4 new messages...
    step 1: fs_read inbox/batch-1.txt
