@@ -6,6 +6,8 @@ Create a sandbox, run a command, delete it.
   <img src="../../assets/runs/hello-world-js.gif" alt="A real run of this example, recorded in a terminal" width="720">
 </p>
 
+You need Node 20+, a **Sandboxes** key ([create a key](https://docs.ai.neevcloud.com/getting-started/create-api-key)) and your [organization and project IDs](https://docs.ai.neevcloud.com/getting-started/org-and-project).
+
 ```bash
 npm install
 

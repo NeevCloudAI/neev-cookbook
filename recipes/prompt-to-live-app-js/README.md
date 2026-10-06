@@ -1,6 +1,6 @@
 # Prompt to live app
 
-Describe a web app in one sentence. An AI agent builds it inside an isolated NeevCloud sandbox and hands you a public URL you can open on your phone.
+Describe a web app in one sentence. An AI agent builds it inside an isolated NeevCloud sandbox and gives you a public URL you can open on your phone.
 
 <p align="center">
   <img src="../../assets/runs/prompt-to-live-app-js.gif" alt="A real run of this recipe, recorded in a terminal" width="720">
@@ -10,15 +10,9 @@ Describe a web app in one sentence. An AI agent builds it inside an isolated Nee
   <img src="../../assets/prompt-to-live-app.png" alt="A pomodoro timer the agent built from the same prompt, open on its preview URL" width="560">
 </p>
 
-## What you need
-
-- Node 20.3 or later
-- A NeevCloud account with two API keys from **Account > API Keys** ([how to create one](https://docs.ai.neevcloud.com/getting-started/create-api-key)):
-  - one with Resource Type **Sandboxes** (`NEEV_API_KEY`)
-  - one with Resource Type **Model API** (`NEEV_MODEL_API_KEY`)
-- Your [organization and project IDs](https://docs.ai.neevcloud.com/getting-started/org-and-project) (`NEEV_ORG_ID`, `NEEV_PROJECT_ID`)
-
 ## Run it
+
+You need Node 20.3+, a **Sandboxes** and a **Model API** key ([create a key](https://docs.ai.neevcloud.com/getting-started/create-api-key)), and your [organization and project IDs](https://docs.ai.neevcloud.com/getting-started/org-and-project).
 
 ```bash
 npm install
@@ -26,28 +20,32 @@ export NEEV_API_KEY=... NEEV_MODEL_API_KEY=... NEEV_ORG_ID=... NEEV_PROJECT_ID=.
 npm start -- "a pomodoro timer with a calm green theme"
 ```
 
-On Windows, see the [setup guide](../../docs/setup.md#windows) for the PowerShell commands.
+On Windows, see the [setup guide](../../docs/setup.md#windows).
 
-The app stays online for 10 minutes (`--keep 0` to stop as soon as it is up). Press `Ctrl+C` to stop sooner.
+The app stays online for 10 minutes. Pass `--keep 0` to stop as soon as it is up, or press `Ctrl+C` to stop sooner.
 
 ## How it works
 
-The script and the agent hold different powers. The script uses the SDK for the lifecycle; the agent only gets workspace tools over MCP.
+1. **Sandbox.** The script starts a sandbox with no internet access.
+2. **Agent.** An agent connects to that sandbox over MCP and writes the app as static files (`index.html`, plus CSS and JavaScript). It can write, read and run commands in the sandbox, but it cannot create, pause or delete sandboxes.
+3. **Serve.** The script starts a web server in the sandbox with `sandbox.processes.start(...)`.
+4. **Publish.** `sandbox.getUrl({ port: 3000 })` gives the server a public preview URL and waits until it answers.
+5. **Clean up.** When the time is up, or you press `Ctrl+C`, the sandbox is deleted and the URL stops working.
 
-1. `neev.sandboxes.create({ egress: { mode: "deny_all" } })` starts an isolated Linux machine with no internet access.
-2. The agent (`agent.ts`) connects to the sandbox MCP server with the `x-sandbox-name` header, so its session is bound to that one sandbox. It reads the tool list from the server and keeps four tools, `fs_write`, `fs_read`, `fs_list` and `exec`, plus a local `finish`. Lifecycle tools such as `delete_sandbox` are never offered, and a call to one is refused.
-3. `sandbox.processes.start("python3", { args: ["-m", "http.server", "3000", "--bind", "0.0.0.0"] })` serves the files. The server binds `0.0.0.0` so the preview URL can reach it.
-4. `sandbox.getUrl({ port: 3000 })` exposes the port and waits until the URL answers.
-5. `sandbox.delete()` runs in a `finally` block, so the sandbox is removed even if the agent fails or you press `Ctrl+C`.
+## Use it in your product
 
-Every tool call the agent makes is recorded in the sandbox audit trail under your API key.
+- **A "build me an app" feature:** call `run()` in `app-builder.ts` with your user's request and hand them the URL it prints.
+- **Your own kind of output:** change `SYSTEM_PROMPT` in `agent.ts`, for example to build a landing page, a report or a data dashboard.
+- **Your own stack:** the sandbox has no internet, so the agent writes plain HTML, CSS and JavaScript. To let it install packages, create the sandbox with an egress allow-list instead ([Internet access](https://docs.ai.neevcloud.com/agentic-studio/overview/internet-access)).
+- **A longer-lived app:** raise `--keep`, or keep the sandbox and pause it between visits.
 
-The model runs on NeevCloud too: `glm-4-7` by default. Set `MODEL` to use a different one, for example `MODEL=glm-5-2`.
+## Good to know
+
+- The agent's tools come from the sandbox's MCP server, filtered to four: `fs_write`, `fs_read`, `fs_list` and `exec`. A call to any other tool is refused.
+- Every tool call the agent makes is recorded in the sandbox's audit trail under your API key.
+- The server listens on `0.0.0.0` so the preview URL can reach it.
+- The model is `glm-4-7` by default. Set `MODEL` to try another, for example `MODEL=glm-5-2`.
 
 ## Time and cost
 
-Typically 1 to 2 minutes from start to URL, plus the time you keep it online. The agent gets at most 25 steps and 4 minutes; if it runs out after writing `index.html`, you get what it wrote so far. You pay for the sandbox while it runs and for the model tokens the agent uses.
-
-## Cleanup
-
-The sandbox and everything in it are deleted when the script ends, fails or you press `Ctrl+C`. The preview URL stops working at the same moment. If the process is killed outright, delete any leftover `live-app-` sandbox from the console.
+Usually 1 to 2 minutes from start to URL, plus the time you keep it online. The agent is limited to 25 steps and 4 minutes; if it runs out after writing `index.html`, you get what it wrote so far. You pay for the sandbox while it runs and for the model tokens. If the process is killed outright, delete any leftover `live-app-` sandbox from the console.

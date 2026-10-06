@@ -1,21 +1,14 @@
 # One MCP URL, a crew of isolated agents
 
-Point several agents at one MCP server without telling them apart and they share one machine and one identity: one agent can overwrite another's work, and afterwards nobody can tell who did what. Here a planner, a coder and a tester connect to the same NeevCloud Sandbox MCP URL, but each gets its own sandbox and its own API key, and the audit trail shows which agent did each thing.
+Point several agents at one MCP server and, by default, they share one machine and one identity: one can overwrite another's work, and afterwards nobody can tell who did what. Here a planner, a coder and a tester all use the same NeevCloud Sandbox MCP URL, but each gets its own sandbox and its own API key, and the audit trail shows which agent did what.
 
 <p align="center">
   <img src="../../assets/runs/mcp-agent-crew-python.gif" alt="A real run of this recipe, recorded in a terminal" width="720">
 </p>
 
-## What you need
-
-- Python 3.11 or later
-- A NeevCloud account with API keys from **Account > API Keys** ([how to create one](https://docs.ai.neevcloud.com/getting-started/create-api-key)):
-  - one with Resource Type **Sandboxes** (`NEEV_API_KEY`)
-  - one with Resource Type **Model API** (`NEEV_MODEL_API_KEY`)
-  - optionally, one more Sandboxes key per agent: `PLANNER_API_KEY`, `CODER_API_KEY`, `TESTER_API_KEY`
-- Your [organization and project IDs](https://docs.ai.neevcloud.com/getting-started/org-and-project) (`NEEV_ORG_ID`, `NEEV_PROJECT_ID`)
-
 ## Run it
+
+You need Python 3.11+, a **Sandboxes** and a **Model API** key ([create a key](https://docs.ai.neevcloud.com/getting-started/create-api-key)), and your [organization and project IDs](https://docs.ai.neevcloud.com/getting-started/org-and-project).
 
 ```bash
 python3.12 -m venv .venv
@@ -25,30 +18,34 @@ export NEEV_API_KEY=... NEEV_MODEL_API_KEY=... NEEV_ORG_ID=... NEEV_PROJECT_ID=.
 python crew.py
 ```
 
-On Windows, see the [setup guide](../../docs/setup.md#windows) for the PowerShell commands.
+On Windows, see the [setup guide](../../docs/setup.md#windows).
 
-By default the crew builds a `slugify(text)` function. Pass your own small task as an argument, for example `python crew.py "a function that converts Roman numerals to integers"`.
+By default the crew builds a `slugify(text)` function. Pass your own small task as an argument: `python crew.py "a function that converts Roman numerals to integers"`.
 
-Each agent key falls back to `NEEV_API_KEY`. With one key the crew still works and every agent is still confined to its own sandbox, but every audit record shows the same credential. Create a key per agent and export `PLANNER_API_KEY`, `CODER_API_KEY` and `TESTER_API_KEY` to see each action attributed to the agent that made it. The script checks each of these keys before creating anything and names any key that is rejected.
+With one key, every agent still works in its own sandbox, but the audit trail shows the same credential for all of them. To see each action attributed to its agent, create one more **Sandboxes** key per agent and export `PLANNER_API_KEY`, `CODER_API_KEY` and `TESTER_API_KEY`.
 
 ## How it works
 
-The script and the agents hold different powers. The script owns the sandboxes and moves files between them with the SDK; each agent only gets workspace tools over MCP, inside its own sandbox.
+1. **Sandboxes.** The script creates three sandboxes with no internet access, one per agent.
+2. **One URL, separate sessions.** Each agent connects to the same MCP URL with its own key and its own `x-sandbox-name` header, so everything it does lands in its own sandbox, under its own key.
+3. **Plan and code.** The planner writes `PLAN.md`. The script copies it to the coder, who writes `solution.py` and its tests and runs them until they pass.
+4. **Test.** The script copies the plan, code and tests to the tester, who runs the full suite and gives a verdict. The tester has no tool to write files, so it can't change what it judges.
+5. **Audit.** The script prints each sandbox's audit trail, with the key behind every action: the agent's key for its own work, the script's key for the hand-overs.
 
-1. `client.sandboxes.create({"name": ..., "egress": {"mode": "deny_all"}})` creates three sandboxes, `crew-planner-…`, `crew-coder-…` and `crew-tester-…`, with no internet access. The script creates them with the SDK rather than letting agents call the MCP server's `create_sandbox`, because the SDK sets the egress policy and keeps creation and deletion out of the agents' hands.
-2. Each agent opens its own MCP session to the same URL, with `Authorization: Bearer <its key>` and `x-sandbox-name: <its sandbox>`, so every tool call it makes lands in its own sandbox under its own key. It reads the tool list from the server and keeps an allowlist: `fs_write`, `fs_read`, `fs_list` and `exec` for the planner and the coder, and only `fs_read`, `fs_list` and `exec` for the tester, which is given no tool to write the code it judges. A local `finish` tool ends each agent's turn. Calls to any other tool are refused.
-3. The planner writes `PLAN.md`: the function's signature, its rules and its edge cases. The script copies it to the coder's sandbox with `sandbox.files.read_text` and `sandbox.files.write`. The coder writes `solution.py` and `test_solution.py`, runs `python3 -m unittest`, and fixes what fails.
-4. The script copies the plan, the code and the tests to the tester's sandbox. The tester runs the tests there and reports a verdict. The script accepts a pass only if the tester says so, its last run of the whole suite (`python3 -m unittest`, not a hand-picked test) actually exited 0, and the plan, code and tests in its sandbox are still exactly what was handed over (`exec` could change them).
-5. `sandbox.audit()` reads each sandbox's trail, page by page, and the script prints it oldest first, with the credential (`caller_source`) behind every record: the agent's key for its own tool calls, the script's key for the hand-overs. Records arrive a second or two after the call, so the script rereads until the trails stop growing.
+## Use it in your product
 
-The models run on NeevCloud too: `glm-4-7` by default. Set `MODEL` to use a different one, for example `MODEL=glm-5-2`.
+- **Your own roles:** each agent is a `Role` in `ROLES` in `crew.py`: its prompt, its tools, its key and its limits. Add a reviewer, swap the tester for a security checker, or change the prompts.
+- **Your own hand-offs:** the script, not the agents, moves files between sandboxes (`_hand_over`). Keep it that way so one agent can never reach into another's machine.
+- **Least privilege:** give each role only the tools it needs, as the tester here gets no write tool. A call to any tool outside a role's list is refused.
+- **Accountability:** one key per agent, or per customer, turns the audit trail into a record of who did what.
 
-The script exits 0 only when the tester's run passed and the audit trails were printed.
+## Good to know
+
+- The script creates and deletes the sandboxes itself, rather than letting agents call the MCP server's `create_sandbox`, so it sets the network policy and agents can't create or delete machines.
+- A pass counts only if the tester says so, its last run of the whole suite exited 0, and the files in its sandbox are still exactly what it was given.
+- Before creating anything, the script checks every agent key and names any that is rejected.
+- The model is `glm-4-7` by default. Set `MODEL` to try another, for example `MODEL=glm-5-2`.
 
 ## Time and cost
 
-Typically 1 to 2 minutes. Each agent has a step limit and a time limit on its model calls (planner 10 steps and 150 seconds, coder 20 and 300, tester 10 and 150), and a slow model reply is cut off at the limit. You pay for three small sandboxes while the script runs and for the model tokens, about a dozen model calls per run.
-
-## Cleanup
-
-All three sandboxes are deleted when the script ends, fails or you press `Ctrl+C`. If the process is killed outright, delete any leftover `crew-` sandbox from the console.
+Usually 1 to 2 minutes and about a dozen model calls. Each agent has its own limits: planner 10 steps and 150 seconds, coder 20 and 300, tester 10 and 150. You pay for three small sandboxes while the script runs, plus the model tokens. All three are deleted when the script ends, fails or you press `Ctrl+C`. If the process is killed outright, delete any leftover `crew-` sandbox from the console.

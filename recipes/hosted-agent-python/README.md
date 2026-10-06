@@ -6,50 +6,9 @@ Run a coding agent on NeevCloud instead of your laptop, give it a task from a sc
   <img src="../../assets/runs/hosted-agent-python.gif" alt="A real run of this recipe, recorded in a terminal" width="720">
 </p>
 
-```text
-1. Creating an agent from the opencode template (it can reach only the NeevCloud model API)...
-   hosted-agent-a1c05545 Ready in 9s
-2. Uploading a small project whose tests fail...
-   node --test: 0 of 4 tests pass
-3. Asking OpenCode (glm-4-7) to: "The tests in slugify.test.js fail. Fix slugify.js so that `node --test slugify.test.js` passes. Do not change the tests. Run the tests to check your fix."
-   | read slugify.js
-   | read slugify.test.js
-   | edit slugify.js
-   | bash node --test slugify.test.js
-   | says: All 4 tests pass.
-   OpenCode exited with code 0 after 26s: 4 model steps, 30253 tokens in, 159 out
-4. Checking the agent's work ourselves...
-   ok     the tests are unchanged
-   ok     node --test: 4 of 4 tests pass
-5. Audit trail: every call this script made into the agent, oldest first
-   08:19:16  fs.write       slugify.js                               success
-   08:19:16  fs.write       slugify.test.js                          success
-   08:19:16  fs.write       opencode.json                            success
-   08:19:17  exec           node                                     success
-   08:19:17  process.start  opencode                                 success
-   08:19:17  process.logs   proc_291f74ced6391db5e594a887aaed811f    success  x9
-   08:19:43  process.get    proc_291f74ced6391db5e594a887aaed811f    success
-   08:19:43  fs.read        slugify.test.js                          success
-   08:19:44  exec           node                                     success
-   17 records, made under API key xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx
-6. Starting a long-running process, pausing the agent, then resuming it...
-   Paused after 5s
-   Ready again after 10s
-   ok     the process started before the pause is running: the agent carried on, no restart
-   ok     node --test after the resume: 4 of 4 tests pass
-Task verified: OpenCode fixed slugify.js, the tests pass, and the agent kept its work through a pause.
-   Agent deleted.
-```
-
-## What you need
-
-- Python 3.11 or later
-- A NeevCloud account with two API keys from **Account > API Keys** ([how to create one](https://docs.ai.neevcloud.com/getting-started/create-api-key)):
-  - one with Resource Type **Sandboxes** (`NEEV_API_KEY`)
-  - one with Resource Type **Model API** (`NEEV_MODEL_API_KEY`), which OpenCode uses to call the model
-- Your [organization and project IDs](https://docs.ai.neevcloud.com/getting-started/org-and-project) (`NEEV_ORG_ID`, `NEEV_PROJECT_ID`)
-
 ## Run it
+
+You need Python 3.11+, a **Sandboxes** and a **Model API** key ([create a key](https://docs.ai.neevcloud.com/getting-started/create-api-key)), and your [organization and project IDs](https://docs.ai.neevcloud.com/getting-started/org-and-project). OpenCode uses the Model API key to call the model.
 
 ```bash
 python3.12 -m venv .venv
@@ -59,33 +18,38 @@ export NEEV_API_KEY=... NEEV_MODEL_API_KEY=... NEEV_ORG_ID=... NEEV_PROJECT_ID=.
 python hosted_agent.py
 ```
 
-On Windows, see the [setup guide](../../docs/setup.md#windows) for the PowerShell commands.
+On Windows, see the [setup guide](../../docs/setup.md#windows).
 
-The script exits 0 only when every check passes: the test file is unchanged, the tests pass after the agent's fix, and after the resume the agent is the same running machine and the tests still pass.
-
-## What a hosted agent adds over a plain sandbox
-
-An agent is a sandbox started from an agent template ([Agents](https://docs.ai.neevcloud.com/agentic-studio/overview-1) in the docs). `client.agent_templates.list()` shows the catalogue; this recipe uses `opencode`, which works with NeevCloud models. The Claude Code and Codex CLI templates need an Anthropic or OpenAI key instead.
-
-- The coding CLI is already installed and pinned to the template's version, so the script only uploads a project and a config file.
-- The template comes with an egress allow-list for its model providers and package registries. The recipe narrows it to the one host it needs with `allow_egress=["inference.ai.neevcloud.com"]`.
-- It has the sandbox lifecycle under `client.agents`: `pause()`, `resume()`, `audit()`, `delete()`, plus `agent.sandbox()` for files, commands and processes.
+The script exits 0 only when the test file is unchanged, the tests pass after the agent's fix, and the agent is the same running machine after the resume.
 
 ## How it works
 
-1. `client.agents.create({"agent_template": "opencode", ...}, allow_egress=[...])` starts the agent and `agent.wait_until_ready()` waits for it, about 9 seconds in our runs.
-2. `machine = agent.sandbox()` gives the files and processes API. The script uploads `project/slugify.js`, its tests and an `opencode.json` that adds NeevCloud as an OpenAI-compatible provider, then runs `node --test` to show the tests fail.
-3. `machine.processes.start(["opencode", "run", "--format", "json", ...], env={"NEEV_MODEL_API_KEY": ...})` runs OpenCode in the background. The model key exists only in that process's environment: `opencode.json` refers to it as `{env:NEEV_MODEL_API_KEY}` and it is never written to a file. The script polls `machine.processes.logs()` and prints one line per OpenCode step from its JSON events. OpenCode's own step limit is 25; after 5 minutes the script kills the process.
-4. The script does not trust the agent's "All tests pass". It reads `slugify.test.js` back to check the agent did not edit the tests, and runs `node --test` itself.
-5. `agent.audit()` returns the audit trail: one record per call the script made into the agent, with the program name but never its arguments, and the API key it was made under (the script masks its ID). Records arrive a few seconds after the call, so the script waits for its last command to appear. What OpenCode does inside its own process, such as its file edits and its test run, is not in the trail; step 3 shows those from OpenCode's output.
-6. Before pausing, the script starts a `sleep 3600` process. After `agent.pause()` and `agent.resume()` it waits for the agent to report `Ready` and checks that the process is still running: a restarted machine would have lost it. Then it runs the tests again.
+1. **Agent.** `client.agents.create(...)` starts an agent from the `opencode` template, with internet access narrowed to the NeevCloud model API. It is ready in about 9 seconds.
+2. **Task.** The script uploads a small JavaScript project whose tests fail, plus an OpenCode config that points at NeevCloud models, and starts OpenCode with the task. The model key is passed only in that process's environment, never written to a file.
+3. **Verify.** The script doesn't trust "All tests pass". It checks the test file is unchanged and runs the tests itself.
+4. **Audit.** `agent.audit()` lists every call the script made into the agent, with the program name but never its arguments.
+5. **Pause and resume.** The script starts a long-running process, pauses the agent, resumes it, and checks the process is still running: the agent kept its work, without a restart.
 
-The model is `glm-4-7` by default. Set `MODEL` to use another NeevCloud model, for example `MODEL=minimax-m3`. In our runs `glm-5-2` stopped with a response-format error inside OpenCode.
+## What an agent adds over a plain sandbox
+
+An agent is a sandbox started from an agent template ([Agents](https://docs.ai.neevcloud.com/agentic-studio/overview-1) in the docs). `client.agent_templates.list()` shows the catalogue.
+
+- The coding CLI is already installed and pinned to the template's version, so you only upload a project and a config file.
+- The template comes with an egress allow-list for its model providers and package registries, which you can narrow, as here, with `allow_egress=[...]`.
+- It has the sandbox lifecycle under `client.agents`: `pause()`, `resume()`, `audit()` and `delete()`, plus `agent.sandbox()` for files, commands and processes.
+
+## Use it in your product
+
+- **Your own repository:** replace the files in `project/` (`PROJECT_FILES`, `TASK` and `TEST_COMMAND` in `hosted_agent.py`) with your project, task and test command.
+- **Agents that wait for work:** pause an agent between tasks and resume it when the next one comes in; it keeps its files and running processes.
+- **Other coding agents:** pick another template from `client.agent_templates.list()`. The Claude Code and Codex templates need an Anthropic or OpenAI key instead of a NeevCloud one.
+
+## Good to know
+
+- The audit trail shows what the script did in the agent, not what OpenCode did inside its own process; the run's output shows those steps from OpenCode's events.
+- OpenCode's own step limit is 25, and the script stops it after 5 minutes.
+- The model is `glm-4-7` by default. Set `MODEL` to try another, for example `MODEL=minimax-m3`. In our runs `glm-5-2` stopped with a response-format error inside OpenCode.
 
 ## Time and cost
 
-About a minute end to end with `glm-4-7` (52 to 64 seconds in our runs, 76 to 86 with `minimax-m3`). With `glm-4-7` OpenCode took 22 to 35 seconds and 4 to 6 model steps, using 30,000 to 48,000 input tokens and a few hundred output tokens. In our runs pausing took 4 to 7 seconds and resuming 6 to 10. You pay for the agent while it runs and for the model tokens OpenCode uses.
-
-## Cleanup
-
-The agent and everything in it are deleted when the script ends, fails or you press `Ctrl+C`. If you press `Ctrl+C` while the agent is still being created, or the process is killed outright, delete any leftover `hosted-agent-` agent from the console.
+About a minute with `glm-4-7` (52 to 64 seconds in our runs). OpenCode took 22 to 35 seconds and 4 to 6 model steps. Pausing took 4 to 7 seconds and resuming 6 to 10. You pay for the agent while it runs and for the model tokens OpenCode uses. The agent is deleted when the script ends, fails or you press `Ctrl+C`. If the process is killed outright, delete any leftover `hosted-agent-` agent from the console.

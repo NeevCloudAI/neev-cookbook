@@ -1,6 +1,6 @@
 # Report generator
 
-Turn a CSV into a finished business report, a PDF and an Excel workbook, without installing a PDF or spreadsheet toolchain on your machine. An AI agent writes and runs the report code inside an isolated NeevCloud sandbox, and the script downloads both files.
+Turn a CSV into a finished PDF report and an Excel workbook. An AI agent writes and runs the code in an isolated NeevCloud sandbox, with pandas, matplotlib and the PDF and Excel libraries installed there for you.
 
 <p align="center">
   <img src="../../assets/runs/report-generator-python.gif" alt="A real run of this recipe, recorded in a terminal" width="720">
@@ -10,15 +10,9 @@ Turn a CSV into a finished business report, a PDF and an Excel workbook, without
   <img src="../../assets/report-generator.png" alt="Page 1 of the expense report from the run recorded above" width="420">
 </p>
 
-## What you need
-
-- Python 3.11 or later
-- A NeevCloud account with two API keys from **Account > API Keys** ([how to create one](https://docs.ai.neevcloud.com/getting-started/create-api-key)):
-  - one with Resource Type **Sandboxes** (`NEEV_API_KEY`)
-  - one with Resource Type **Model API** (`NEEV_MODEL_API_KEY`)
-- Your [organization and project IDs](https://docs.ai.neevcloud.com/getting-started/org-and-project) (`NEEV_ORG_ID`, `NEEV_PROJECT_ID`)
-
 ## Run it
+
+You need Python 3.11+, a **Sandboxes** and a **Model API** key ([create a key](https://docs.ai.neevcloud.com/getting-started/create-api-key)), and your [organization and project IDs](https://docs.ai.neevcloud.com/getting-started/org-and-project).
 
 ```bash
 python3.12 -m venv .venv
@@ -28,11 +22,9 @@ export NEEV_API_KEY=... NEEV_MODEL_API_KEY=... NEEV_ORG_ID=... NEEV_PROJECT_ID=.
 python report.py
 ```
 
-On Windows, see the [setup guide](../../docs/setup.md#windows) for the PowerShell commands.
+On Windows, see the [setup guide](../../docs/setup.md#windows).
 
-With no arguments it reports on the bundled sample, `data/expenses.csv`: 360 rows of synthetic 2025 monthly budget and actual spend for six departments and five cost categories, with a few made-up overruns to find. `report.pdf` and `report.xlsx` are saved in the current directory and the key findings are printed.
-
-To use your own data and brief:
+With no arguments it reports on the bundled sample, `data/expenses.csv`: a year of synthetic budget and actual spend for six departments, with a few overruns to find. `report.pdf` and `report.xlsx` are saved in the current folder and the key findings are printed. To use your own data and brief:
 
 ```bash
 python report.py --csv sales.csv --out-dir reports "Quarterly sales report by region and product line"
@@ -40,22 +32,27 @@ python report.py --csv sales.csv --out-dir reports "Quarterly sales report by re
 
 ## How it works
 
-The script and the agent hold different powers. The script uses the SDK for the lifecycle, the network and the downloads; the agent only gets workspace tools over MCP.
+1. **Install.** The script starts a sandbox that can reach only the Python package index, and installs pandas, matplotlib, openpyxl and fpdf2.
+2. **Lock down.** It removes all internet access with `sandbox.update(...)`, and only then uploads your CSV.
+3. **Build.** An agent connects to the sandbox over MCP. It writes one script for the workbook and one for the PDF, runs them, and fixes them until they work.
+4. **Check.** The agent can only finish when both files pass the script's checks: a real PDF with at least one page and a chart, and a real workbook with at least two sheets and a formula. Otherwise it is told what is missing and keeps going.
+5. **Download.** The script downloads both files with `sandbox.files.read(...)`, saves them and prints the findings. The sandbox is then deleted.
 
-1. `client.sandboxes.create({...}, allow_egress=["pypi.org", "files.pythonhosted.org"])` starts an isolated Linux machine that can reach only the Python package index. `sandbox.exec(["python3", "-m", "pip", "install", ...])` installs `pandas`, `matplotlib`, `openpyxl` and `fpdf2`, which the default template does not include.
-2. `sandbox.update({"egress": {"mode": "deny_all"}})` then removes all internet access, before your data is uploaded with `sandbox.files.upload_file(path, "data.csv")`. Code the model writes cannot open a connection to any host.
-3. The agent (`agent.py`) connects to the sandbox MCP server with the `x-sandbox-name` header, so its session is bound to that one sandbox. It reads the tool list from the server and keeps four tools, `fs_write`, `fs_read`, `fs_list` and `exec`, plus a local `finish`. Lifecycle tools such as `delete_sandbox` are never offered, and a call to one is refused. The agent writes `build_xlsx.py` and `build_pdf.py`, runs them, and fixes them until they work.
-4. `finish` is accepted only when both files pass the script's checks: each must be a regular file of at most 50 MB, `sandbox.files.read()` downloads it, the PDF must have a PDF header and end marker, at least one page and an embedded chart image, and the workbook must open as an XLSX with at least two sheets and at least one formula. Otherwise the agent is told what is wrong and keeps going. The script then saves both files and prints their page, image, sheet and formula counts. The checks use only the Python standard library.
-5. `sandbox.delete()` runs in a `finally` block, so the sandbox is removed even if the agent fails or you press `Ctrl+C`.
+## Use it in your product
 
-The checks prove the files are real and have the parts asked for; they do not prove every number is right. The agent is told to put only computed figures in the report and to quote its findings from what its scripts printed, so read the report as a model-written draft. The workbook's formulas are calculated when you open it in Excel, LibreOffice or Google Sheets.
+- **Scheduled reports:** run `report.py` from a cron job or a workflow with that period's CSV and a fixed brief, and send the PDF and workbook on.
+- **Your own report style:** `SYSTEM_PROMPT` in `agent.py` sets the layout: the sheets, the PDF sections, units and fonts. Change it to match your house style.
+- **Your own checks:** `check_pdf` and `check_xlsx` in `report.py` decide when a report counts as done. Add your own, for example a required section title or sheet name.
+- **Other libraries:** add packages to `PIP_INSTALL` in `report.py`; they are installed before internet access is removed.
 
-The model runs on NeevCloud too: `glm-4-7` by default. Set `MODEL` to use a different one, for example `MODEL=minimax-m3`.
+## Good to know
+
+- The checks prove the files are real and have the parts asked for, not that every number is right. The agent is told to use only computed figures, but read the report as a model-written draft.
+- The workbook's totals are Excel formulas, calculated when you open it in Excel, LibreOffice or Google Sheets.
+- Code the model writes cannot reach the internet, and downloads are capped at 50 MB per file.
+- The agent gets four tools from the sandbox's MCP server, `fs_write`, `fs_read`, `fs_list` and `exec`, plus `finish`. Any other tool is refused.
+- The model is `glm-4-7` by default. Set `MODEL` to try another, for example `MODEL=minimax-m3`.
 
 ## Time and cost
 
-Typically 2 to 4.5 minutes end to end with the default model: about 50 seconds to install the packages, then 7 to 22 agent steps. The agent gets at most 25 steps and 7 minutes; if it runs out with both files already passing the checks, you get them without the findings. You pay for the sandbox while it runs and for the model tokens the agent uses.
-
-## Cleanup
-
-The sandbox and everything in it, including the uploaded CSV, are deleted when the script ends, fails or you press `Ctrl+C`. If the process is killed outright, delete any leftover `report-gen-` sandbox from the console.
+Usually 2.5 to 7.5 minutes: about 50 seconds to install the packages, then the agent's work. The agent is limited to 25 steps and 7 minutes; if it runs out with both files already passing the checks, you get them without the findings. You pay for the sandbox while it runs and for the model tokens. If the process is killed outright, delete any leftover `report-gen-` sandbox from the console.

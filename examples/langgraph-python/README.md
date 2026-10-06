@@ -23,6 +23,8 @@ taking the model's word for it.
 
 ## Run it
 
+You need Python 3.11+, a **Sandboxes** and a **Model API** key ([create a key](https://docs.ai.neevcloud.com/getting-started/create-api-key)). No organization or project IDs: the MCP connection works them out from the key.
+
 ```bash
 python3.12 -m venv .venv
 source .venv/bin/activate

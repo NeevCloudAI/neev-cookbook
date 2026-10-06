@@ -1,78 +1,14 @@
 # Fix the failing test
 
-Hand an AI agent a repository with a failing test. It fixes the code in an isolated NeevCloud sandbox, and you get back a `fix.patch` that the script has proven: the tests pass, the test files are untouched, and the patch applies cleanly. The script only reads your repository; applying the patch is up to you.
+Hand an AI agent a repository with a failing test. It fixes the code, never the tests, in an isolated NeevCloud sandbox, and you get back a `fix.patch` the script has proven: the tests pass in a fresh sandbox, the test files are untouched, and the patch applies cleanly. Your repository is only read; applying the patch is up to you.
 
 <p align="center">
   <img src="../../assets/runs/fix-failing-test-python.gif" alt="A real run of this recipe, recorded in a terminal" width="720">
 </p>
 
-```text
-3. Running the tests: python3 -m unittest
-   | AssertionError: 67260 != 63720
-   |
-   | ----------------------------------------------------------------------
-   | Ran 8 tests in 0.003s
-   |
-   | FAILED (failures=4)
-4. Asking glm-4-7 to fix the code (2 files read-only: tests and non-Python files)...
-   step 1: fs_read /workspace/tests/test_cart.py
-   step 1: fs_list /workspace
-   step 2: fs_read /workspace/shop/cart.py
-   step 3: fs_write /workspace/shop/cart.py
-   step 4: exec python3 -m unittest
-   step 5: finish (running the tests)
-   agent's summary: Fixed bulk_discount_percent to check >= 50 before >= 10, and fixed gst to round halves up using (amount * GST_PERCENT + 50) // 100.
-5. Checking the agent's work...
-   unchanged: 2 read-only files, byte for byte
-   changed: shop/cart.py
-   Sandbox deleted.
-6. Running the tests in a fresh sandbox: the original files plus only the changed source files...
-   | ........
-   | ----------------------------------------------------------------------
-   | Ran 8 tests in 0.001s
-   |
-   | OK
-7. Wrote fix.patch; it applies cleanly to the original files:
-
-diff --git a/recipes/fix-failing-test-python/fixture/shop/cart.py b/recipes/fix-failing-test-python/fixture/shop/cart.py
---- a/recipes/fix-failing-test-python/fixture/shop/cart.py
-+++ b/recipes/fix-failing-test-python/fixture/shop/cart.py
-@@ -5,16 +5,16 @@
- 
- def bulk_discount_percent(quantity: int) -> int:
-     """Percentage off for buying in bulk: 5% from 10 items, 10% from 50 items."""
-+    if quantity >= 50:
-+        return 10
-     if quantity >= 10:
-         return 5
--    if quantity >= 50:
--        return 10
-     return 0
- 
- 
- def gst(amount: int) -> int:
-     """GST on an amount in paise, rounded to the nearest paisa (a half rounds up)."""
--    return amount * GST_PERCENT // 100
-+    return (amount * GST_PERCENT + 50) // 100
- 
- 
- def order_total(unit_price: int, quantity: int) -> int:
-
-Apply it with:
-   cd ~/neev-cookbook && git apply ~/neev-cookbook/recipes/fix-failing-test-python/fix.patch
-   Sandbox deleted.
-```
-
-## What you need
-
-- Python 3.11 or later, and `git`
-- A clone of this repository (the bundled example is read with `git ls-files`)
-- A NeevCloud account with two API keys from **Account > API Keys** ([how to create one](https://docs.ai.neevcloud.com/getting-started/create-api-key)):
-  - one with Resource Type **Sandboxes** (`NEEV_API_KEY`)
-  - one with Resource Type **Model API** (`NEEV_MODEL_API_KEY`)
-- Your [organization and project IDs](https://docs.ai.neevcloud.com/getting-started/org-and-project) (`NEEV_ORG_ID`, `NEEV_PROJECT_ID`)
-
 ## Run it
+
+You need Python 3.11+, `git`, a clone of this repository, a **Sandboxes** and a **Model API** key ([create a key](https://docs.ai.neevcloud.com/getting-started/create-api-key)), and your [organization and project IDs](https://docs.ai.neevcloud.com/getting-started/org-and-project).
 
 ```bash
 python3.12 -m venv .venv
@@ -82,36 +18,39 @@ export NEEV_API_KEY=... NEEV_MODEL_API_KEY=... NEEV_ORG_ID=... NEEV_PROJECT_ID=.
 python fix_test.py
 ```
 
-On Windows, see the [setup guide](../../docs/setup.md#windows) for the PowerShell commands.
+On Windows, see the [setup guide](../../docs/setup.md#windows).
 
-By default it fixes `fixture/`, a small shop module with two real bugs and four failing tests. To fix your own repository instead:
+By default it fixes `fixture/`, a small shop module with two real bugs and four failing tests. To fix your own repository:
 
 ```bash
 python fix_test.py --repo ~/code/my-lib --test-cmd "python3 -m unittest tests/test_slugs.py" --out ~/my-lib-fix.patch
 ```
 
-- `--repo` is a git repository, or a folder inside one. Only tracked files are uploaded, as they are in your working tree; untracked files such as `.env` stay on your machine, and symlinks are skipped. The limit is 300 files and 5 MB.
-- `--test-cmd` runs in the `--repo` folder inside the sandbox (default `python3 -m unittest`). The sandbox has Python 3 and no internet access, so the tests must run with the standard library: `pytest` and your dependencies are not installed.
-- `--out` is where the patch goes (default `./fix.patch`). It must be outside the `--repo` folder. The patch's paths are relative to the git top level, so `git apply` runs there.
-
-The agent may change only Python source files outside the tests. Test files (anything under a `test*` or `*tests` folder, `test*.py`, `*_test.py`, `conftest.py`) and every non-Python file are read-only, so test data, configs and scripts cannot be changed to make the tests pass. The script exits 0 only when every check passes.
+- `--repo`: a git repository, or a folder in one. Only tracked files are uploaded, up to 300 files and 5 MB; untracked files such as `.env` stay on your machine.
+- `--test-cmd`: the test command, run in that folder (default `python3 -m unittest`). The sandbox has Python 3 and no internet, so tests must run with the standard library.
+- `--out`: where the patch goes (default `./fix.patch`), outside `--repo`. Apply it with `git apply` at the repository's top level.
 
 ## How it works
 
-The script and the agent hold different powers. The script uses the SDK to set up the sandbox and to check the result; the agent only gets workspace tools over MCP.
+1. **Reproduce.** The script uploads your tracked files to a sandbox with no internet access and runs the tests to confirm they fail.
+2. **Fix.** An agent connects to the sandbox over MCP, reads the code, edits it and reruns the tests. It can change only Python source files: test files and every non-Python file are read-only, and it can finish only once the tests pass.
+3. **Verify the files.** The script hashes every file in the sandbox. If any read-only file changed by a single byte, the run fails.
+4. **Build the patch.** The script reads the changed files back, builds a patch and checks it applies cleanly to your originals with `git apply`.
+5. **Verify the fix.** It deletes the agent's sandbox, starts a fresh one with the original files plus only the changed source files, and runs the tests again. Only if they pass does it write `fix.patch`.
 
-1. `client.sandboxes.create({"egress": {"mode": "deny_all"}})` starts an isolated Linux machine with no internet access. `sandbox.files.write()` uploads the tracked files, and `sandbox.exec(["sh", "-c", test_cmd])` runs the tests to confirm they fail. If they already pass, there is nothing to fix and the script stops.
-2. The agent (`agent.py`) connects to the sandbox MCP server with the `x-sandbox-name` header, so its session is bound to that one sandbox. It reads the tool list from the server and keeps four tools, `fs_write`, `fs_read`, `fs_list` and `exec`, plus a local `finish`. Writing to a read-only file is refused, and `finish` is accepted only after the tests pass.
-3. The script does not take the agent's word for it. One `sandbox.exec` hashes every tracked file in the workspace: any read-only file that differs from the original by a single byte, or is gone, fails the run, whatever the agent did to it.
-4. The script reads the changed source files back with `sandbox.files.read()` and deletes the agent's sandbox. It then creates a fresh sandbox that the agent never touched, uploads the original files plus only the changed source files, and runs the tests there. New files the agent created are listed and left out, so a fix that depends on them fails here, and so does one that depends on anything else the agent changed in its own sandbox.
-5. Before creating the second sandbox, the script builds a unified diff of the changed source files, applies it with `git apply --check` and `git apply` to a temporary copy of the originals on your machine, and checks the result matches the fixed files byte for byte. Once the fresh sandbox passes, it writes `fix.patch`. You apply it with `git apply`.
+## Use it in your product
 
-The model runs on NeevCloud too: `glm-4-7` by default. Set `MODEL` to use a different one, for example `MODEL=minimax-m3` or `MODEL=glm-5-2`.
+- **A fix bot for CI:** run `fix_test.py` when a test job fails, with `--test-cmd` set to the failing test, and attach `fix.patch` to the pull request for a person to review.
+- **Your own guardrails:** `is_read_only` in `fix_test.py` decides which files the agent may not touch. Extend it to protect migrations, configs or generated code.
+- **Projects with dependencies:** the sandbox has no internet, so third-party test dependencies aren't installed. To use them, create the sandbox with an egress allow-list for your package index ([Internet access](https://docs.ai.neevcloud.com/agentic-studio/overview/internet-access)).
+
+## Good to know
+
+- Read-only files: anything under a `test*` or `*tests` folder, `test*.py`, `*_test.py`, `conftest.py`, and every non-Python file. So test data, configs and scripts can't be changed to make the tests pass.
+- Files the agent created are listed and left out of the patch, so a fix that depends on them fails the fresh-sandbox run.
+- The script exits 0 only when every check passes.
+- The model is `glm-4-7` by default. Set `MODEL` to try another, for example `MODEL=minimax-m3`.
 
 ## Time and cost
 
-About 25 to 40 seconds for the bundled example with `glm-4-7`. The agent gets at most 30 steps and 5 minutes of model time; each command it runs is also bounded by the sandbox's per-call time limit, and each test run by the script by 2 minutes. You pay for the sandbox while it runs, typically under a minute across the two sandboxes, and for the model tokens the agent uses.
-
-## Cleanup
-
-The agent's sandbox is deleted before the second one is created, and every sandbox is deleted when the script ends, fails or you press `Ctrl+C`. If the process is killed outright, delete any leftover `fix-test-` sandbox from the console.
+About 25 to 40 seconds for the bundled example, and under a minute of sandbox time across the two sandboxes, plus the model tokens. The agent is limited to 30 steps and 5 minutes, and each test run to 2 minutes. Every sandbox is deleted when the script ends, fails or you press `Ctrl+C`. If the process is killed outright, delete any leftover `fix-test-` sandbox from the console.
