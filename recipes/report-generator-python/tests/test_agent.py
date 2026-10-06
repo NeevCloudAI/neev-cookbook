@@ -79,6 +79,35 @@ def test_reports_built_by_two_scripts_pass_once_both_have_run():
     assert model.requests[3]["messages"][-1]["content"] == "error: report.pdf missing"
 
 
+def test_rewriting_a_script_that_never_ran_tells_the_model_to_run_it_first():
+    session = FakeSession()
+    write = {"path": "build_pdf.py", "content": "pdf.output('report.pdf')"}
+    model = FakeModel([tool_call("fs_write", write),
+                       tool_call("fs_write", write, "c2"),
+                       tool_call("exec", {"program": "python3", "args": ["build_pdf.py"]}, "c3"),
+                       tool_call("fs_write", write, "c4"),
+                       tool_call("finish", {"findings": "done"}, "c5")])
+    build(session, model, check=lambda: asyncio.sleep(0))
+    results = [m["content"] for m in model.requests[4]["messages"] if m["role"] == "tool"]
+    assert "run it" not in results[0]
+    # glm-4-7 once rewrote build_pdf.py eight times without running it and ran out of time
+    assert "build_pdf.py has not run since you last wrote it" in results[1]
+    # a write after a run is an ordinary fix, with no reminder
+    assert "has not run" not in results[3]
+
+
+def test_a_run_through_a_shell_counts_as_running_the_script():
+    session = FakeSession()
+    write = {"path": "build_xlsx.py", "content": "wb.save('report.xlsx')"}
+    model = FakeModel([tool_call("fs_write", write),
+                       tool_call("exec", {"program": "sh", "args": ["-c", "python3 ./build_xlsx.py"]}, "c2"),
+                       tool_call("fs_write", write, "c3"),
+                       tool_call("finish", {"findings": "done"}, "c4")])
+    build(session, model, check=lambda: asyncio.sleep(0))
+    results = [m["content"] for m in model.requests[3]["messages"] if m["role"] == "tool"]
+    assert "has not run" not in results[2]
+
+
 def test_finish_is_refused_with_the_check_result_until_the_reports_are_valid():
     session = FakeSession()
     model = FakeModel([tool_call("finish", {"findings": "early"}),
