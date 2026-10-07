@@ -85,6 +85,7 @@ jobs:
               {"name": "human-review-gate-js", "lang": "node", "cmd": "npm start -- --reject"},
               {"name": "ai-data-analyst-js", "lang": "node", "cmd": "npm start"},
               {"name": "best-of-n-fork-js", "lang": "node", "cmd": "npm start"},
+              {"name": "agent-session-report-js", "lang": "node", "cmd": "npm start -- --out ../../report.md"},
           ]
           for r in recipes:
               r["dir"] = f"recipes/{r['name']}"

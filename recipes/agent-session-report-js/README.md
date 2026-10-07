@@ -2,27 +2,25 @@
 
 An agent just worked inside your sandbox. This recipe tells you what it actually did, from the sandbox's own audit trail rather than the agent's account: every file it read or wrote and every command it ran, with sensitive reads flagged.
 
-There is also a [TypeScript version](../agent-session-report-js).
+This is the TypeScript version of the [Python recipe](../agent-session-report-python).
 
 <p align="center">
-  <img src="../../assets/runs/agent-session-report-python.gif" alt="A real run of this recipe, recorded in a terminal" width="720">
+  <img src="../../assets/runs/agent-session-report-js.gif" alt="A real run of this recipe, recorded in a terminal" width="720">
 </p>
 
 ## Run it
 
-You need Python 3.11+, a **Sandboxes** and a **Model API** key ([create a key](https://docs.ai.neevcloud.com/getting-started/create-api-key)), and your [organization and project IDs](https://docs.ai.neevcloud.com/getting-started/org-and-project).
+You need Node 20.3+, a **Sandboxes** and a **Model API** key ([create a key](https://docs.ai.neevcloud.com/getting-started/create-api-key)), and your [organization and project IDs](https://docs.ai.neevcloud.com/getting-started/org-and-project).
 
 ```bash
-python3.12 -m venv .venv
-source .venv/bin/activate
-pip install -r requirements.txt
+npm install
 export NEEV_API_KEY=... NEEV_MODEL_API_KEY=... NEEV_ORG_ID=... NEEV_PROJECT_ID=...
-python session_report.py
+npm start
 ```
 
 On Windows, see the [setup guide](../../docs/setup.md#windows).
 
-The report prints to the terminal and is saved to `report.md` (change it with `--out`). Pass your own task as the first argument to give the agent something else to do.
+The report prints to the terminal and is saved to `report.md` (change it with `npm start -- --out other.md`). Pass your own task as the first argument to give the agent something else to do: `npm start -- "List every setting the app reads"`.
 
 ## How it works
 
@@ -33,9 +31,9 @@ The report prints to the terminal and is saved to `report.md` (change it with `-
 
 ## Use it in your product
 
-- **Report on any sandbox:** `read_trail()` in `session_report.py` and `make_report()` in `report.py` work on any sandbox your agents use, not just this one. Run them before you delete the sandbox.
-- **Show it to your users:** `to_markdown()` gives the report as Markdown, ready for a dashboard, a ticket or a chat message.
-- **Your own red flags:** extend `SENSITIVE` and `DELETE_PROGRAMS` in `report.py` with the paths and programs that matter to you.
+- **Report on any sandbox:** `readTrail()` in `session-report.ts` and `makeReport()` in `report.ts` work on any sandbox your agents use, not just this one. Run them before you delete the sandbox.
+- **Show it to your users:** `toMarkdown()` gives the report as Markdown, ready for a dashboard, a ticket or a chat message.
+- **Your own red flags:** extend `SENSITIVE` and `DELETE_PROGRAMS` in `report.ts` with the paths and programs that matter to you.
 
 ## What the trail records
 
@@ -48,4 +46,4 @@ Each record names the operation, the program and the path it acted on, the outco
 
 ## Time and cost
 
-Usually 20 to 40 seconds with `glm-4-7`; slower models can take a couple of minutes. The agent is limited to 15 steps and 3 minutes. You pay for under a minute of sandbox time plus the model tokens. The sandbox is deleted when the script ends, fails or you press `Ctrl+C`, and only the report stays on your machine. If the process is killed outright, delete any leftover `session-report-` sandbox from the console. The default model is `glm-4-7`; set `MODEL` to try another.
+Usually 30 to 40 seconds with `glm-4-7`; slower models take longer, about a minute with `minimax-m3`. The agent is limited to 15 steps and 3 minutes. You pay for under a minute of sandbox time plus the model tokens. The sandbox is deleted when the script ends, fails or you press `Ctrl+C`, and only the report stays on your machine. If the process is killed outright, delete any leftover `session-report-js-` sandbox from the console. The default model is `glm-4-7`; set `MODEL` to try another.

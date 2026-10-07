@@ -61,7 +61,7 @@ In about a minute you get a public URL to an app an agent built inside a sandbox
 
 | Recipe | What you get | Python | TypeScript |
 | --- | --- | --- | --- |
-| **"What did my agent do?" session report** | A timeline of an agent's session from the audit trail, with sensitive reads flagged | [Python](recipes/agent-session-report-python) |  |
+| **"What did my agent do?" session report** | A timeline of an agent's session from the audit trail, with sensitive reads flagged | [Python](recipes/agent-session-report-python) | [TypeScript](recipes/agent-session-report-js) |
 | **Audit evidence pack** | Every recorded operation per API key, exported to CSV and Markdown with a SHA-256 manifest | [Python](recipes/audit-evidence-pack-python) |  |
 | **Human review gate** | See an agent's diff and its audit trail side by side, then approve or reject the change | [Python](recipes/human-review-gate-python) | [TypeScript](recipes/human-review-gate-js) |
 
