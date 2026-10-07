@@ -82,7 +82,9 @@ jobs:
               {"name": "injection-proof-agent-js", "lang": "node", "cmd": "npm start"},
               {"name": "undo-agent-mistake-js", "lang": "node", "cmd": "npm start"},
               {"name": "hosted-agent-python", "lang": "python", "cmd": "python hosted_agent.py"},
+              {"name": "human-review-gate-js", "lang": "node", "cmd": "npm start -- --reject"},
               {"name": "ai-data-analyst-js", "lang": "node", "cmd": "npm start"},
+              {"name": "best-of-n-fork-js", "lang": "node", "cmd": "npm start"},
               {"name": "agent-session-report-js", "lang": "node", "cmd": "npm start -- --out ../../report.md"},
           ]
           for r in recipes:
