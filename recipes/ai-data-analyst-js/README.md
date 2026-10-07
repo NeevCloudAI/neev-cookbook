@@ -2,26 +2,24 @@
 
 Ask a question about a CSV in plain English. An AI agent answers it by writing and running pandas code in an isolated NeevCloud sandbox with no internet access, and gives you a chart and its findings.
 
-There is also a [TypeScript version](../ai-data-analyst-js).
+This is the TypeScript version of the [Python recipe](../ai-data-analyst-python): your code is TypeScript, and the analysis the agent writes runs as Python inside the sandbox.
 
 <p align="center">
-  <img src="../../assets/runs/ai-data-analyst-python.gif" alt="A real run of this recipe, recorded in a terminal" width="720">
+  <img src="../../assets/runs/ai-data-analyst-js.gif" alt="A real run of this recipe, recorded in a terminal" width="720">
 </p>
 
 <p align="center">
-  <img src="../../assets/ai-data-analyst.png" alt="Monthly revenue for the top cities, charted by the agent from the bundled sample data" width="640">
+  <img src="../../assets/ai-data-analyst-js.png" alt="Monthly revenue for the top cities, charted by the agent in the run recorded above" width="640">
 </p>
 
 ## Run it
 
-You need Python 3.11+, a **Sandboxes** and a **Model API** key ([create a key](https://docs.ai.neevcloud.com/getting-started/create-api-key)), and your [organization and project IDs](https://docs.ai.neevcloud.com/getting-started/org-and-project).
+You need Node 20.3+, a **Sandboxes** and a **Model API** key ([create a key](https://docs.ai.neevcloud.com/getting-started/create-api-key)), and your [organization and project IDs](https://docs.ai.neevcloud.com/getting-started/org-and-project).
 
 ```bash
-python3.12 -m venv .venv
-source .venv/bin/activate
-pip install -r requirements.txt
+npm install
 export NEEV_API_KEY=... NEEV_MODEL_API_KEY=... NEEV_ORG_ID=... NEEV_PROJECT_ID=...
-python analyst.py
+npm start
 ```
 
 On Windows, see the [setup guide](../../docs/setup.md#windows).
@@ -29,7 +27,7 @@ On Windows, see the [setup guide](../../docs/setup.md#windows).
 With no arguments it analyses the bundled sample, `data/sales.csv`: a year of synthetic monthly sales for eight Indian cities. The chart is saved as `chart.png` and the findings are printed. To use your own data and question:
 
 ```bash
-python analyst.py --csv tickets.csv --out tickets.png "Which support channel is slowest to resolve?"
+npm start -- --csv tickets.csv --out tickets.png "Which support channel is slowest to resolve?"
 ```
 
 ## How it works
@@ -42,9 +40,9 @@ python analyst.py --csv tickets.csv --out tickets.png "Which support channel is 
 
 ## Use it in your product
 
-- **"Ask your data" in your app:** call `run()` in `analyst.py` with the user's question and their uploaded file. It saves the chart to the path you give and prints the findings; send both back to your user.
-- **Your own analyses:** change `SYSTEM_PROMPT` in `agent.py`, for example to always produce a summary table or to follow your charting style.
-- **Other libraries:** add packages to the install step in `analyst.py` (`PIP_INSTALL`); they are installed before internet access is removed.
+- **"Ask your data" in your app:** call `run()` in `analyst.ts` with the user's question and their uploaded file. It saves the chart to the path you give and prints the findings; send both back to your user.
+- **Your own analyses:** change `SYSTEM_PROMPT` in `agent.ts`, for example to always produce a summary table or to follow your charting style.
+- **Other libraries:** add packages to the install step in `analyst.ts` (`PIP_INSTALL`); they are installed before internet access is removed.
 
 ## Good to know
 
@@ -56,4 +54,4 @@ python analyst.py --csv tickets.csv --out tickets.png "Which support channel is 
 
 ## Time and cost
 
-Usually 75 to 95 seconds: about 30 seconds to install pandas and matplotlib, then 4 to 7 agent steps. The agent is limited to 20 steps and 4 minutes. You pay for the sandbox while it runs and for the model tokens. If the process is killed outright, delete any leftover `data-analyst-` sandbox from the console.
+Usually 85 to 95 seconds: about 30 seconds to install pandas and matplotlib, then 4 to 7 agent steps. The agent is limited to 20 steps and 4 minutes. You pay for the sandbox while it runs and for the model tokens. If the process is killed outright, delete any leftover `data-analyst-js-` sandbox from the console.

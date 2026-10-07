@@ -42,7 +42,7 @@ In about a minute you get a public URL to an app an agent built inside a sandbox
 | Recipe | What you get | Python | TypeScript |
 | --- | --- | --- | --- |
 | **Prompt to live app** | Describe an app; an agent builds it in a sandbox and returns a public URL | [Python](recipes/prompt-to-live-app-python) | [TypeScript](recipes/prompt-to-live-app-js) |
-| **AI data analyst** | Ask a question about a CSV; an agent answers with pandas in a sandbox cut off from the internet | [Python](recipes/ai-data-analyst-python) |  |
+| **AI data analyst** | Ask a question about a CSV; an agent answers with pandas in a sandbox cut off from the internet | [Python](recipes/ai-data-analyst-python) | [TypeScript](recipes/ai-data-analyst-js) |
 | **Report generator** | Turn a CSV into a finished PDF and XLSX with a full Linux toolchain you never install | [Python](recipes/report-generator-python) |  |
 | **Fix the failing test** | An agent fixes the code, never the tests, and hands back a patch verified in a fresh sandbox | [Python](recipes/fix-failing-test-python) |  |
 | **Code mode over MCP** | One `run_python` tool against tool calls on the same question: fewer calls, fewer tokens, right answer | [Python](recipes/code-mode-mcp-python) |  |
