@@ -80,7 +80,7 @@ In about a minute you get a public URL to an app an agent built inside a sandbox
 | Recipe | What you get | Python | TypeScript |
 | --- | --- | --- | --- |
 | **Undo the agent's mistake** | An agent deletes your data; one rollback restores the files, the running server and its memory | [Python](recipes/undo-agent-mistake-python) | [TypeScript](recipes/undo-agent-mistake-js) |
-| **Best-of-N with fork** | Fork a sandbox three times, race three agents on a bug, keep the first fix that passes the tests | [Python](recipes/best-of-n-fork-python) |  |
+| **Best-of-N with fork** | Fork a sandbox three times, race three agents on a bug, keep the first fix that passes the tests | [Python](recipes/best-of-n-fork-python) | [TypeScript](recipes/best-of-n-fork-js) |
 | **Skip setup with a golden snapshot** | Set up once, then start every worker from a snapshot with packages, data and a warm service | [Python](recipes/golden-snapshot-python) |  |
 | **Debug at the failure point** | A job fails; fork it at that moment and let an agent find the cause in the live process | [Python](recipes/debug-at-failure-python) |  |
 | **Eval rollouts from one golden snapshot** | Compare models on tasks where every rollout starts from the same golden state | [Python](recipes/eval-rollouts-python) |  |
