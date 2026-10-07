@@ -83,6 +83,7 @@ jobs:
               {"name": "undo-agent-mistake-js", "lang": "node", "cmd": "npm start"},
               {"name": "hosted-agent-python", "lang": "python", "cmd": "python hosted_agent.py"},
               {"name": "ai-data-analyst-js", "lang": "node", "cmd": "npm start"},
+              {"name": "agent-session-report-js", "lang": "node", "cmd": "npm start -- --out ../../report.md"},
           ]
           for r in recipes:
               r["dir"] = f"recipes/{r['name']}"
