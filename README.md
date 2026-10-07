@@ -186,7 +186,7 @@ recipes/      one folder per recipe, each self-contained with its own README and
 examples/     framework integrations and short single-feature examples
 docs/         the setup guide for macOS, Linux and Windows
 assets/       screenshots and run recordings used by the READMEs
-.github/      issue and pull request templates, and the nightly check that runs every recipe
+.github/      issue and pull request templates, and the nightly check that runs every recipe and example
 ```
 
 ## Contributing

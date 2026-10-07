@@ -1,6 +1,6 @@
 name: nightly
 
-# Runs every recipe end to end against production each night, so a recipe that
+# Runs every recipe and example end to end against production each night, so one that
 # stops working is caught before a reader finds it.
 #
 # Needs, on a project used only for this check:
@@ -22,7 +22,7 @@ on:
   workflow_dispatch:
     inputs:
       recipes:
-        description: "Space-separated recipe names to run (empty runs all). A filtered run never opens or updates the failure issue."
+        description: "Space-separated recipe or example names to run (empty runs all). A filtered run never opens or updates the failure issue."
         required: false
         default: ""
 
@@ -102,7 +102,7 @@ jobs:
           wanted = os.environ.get("FILTER", "").split()
           unknown = sorted(set(wanted) - {r["name"] for r in recipes})
           if unknown:
-              raise SystemExit(f"unknown recipes: {' '.join(unknown)}")
+              raise SystemExit(f"unknown recipes or examples: {' '.join(unknown)}")
           # A recipe listed here before its folder lands on this branch is skipped, not failed.
           present = [r for r in recipes if os.path.isdir(r["dir"])]
           absent = sorted(set(wanted) - {r["name"] for r in present})

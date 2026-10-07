@@ -77,9 +77,10 @@ written by hand.
 - Paste real output from those runs into the pull request, with keys removed.
 - Check the diff for keys, account IDs and internal hostnames.
 
-The pull request template has the checklist. A nightly workflow runs every recipe against NeevCloud,
-so add your recipe to the matrix in `.github/workflows/nightly.yml` and its prefix to
-`.github/scripts/cleanup_sandboxes.py`.
+The pull request template has the checklist. A nightly workflow runs every recipe and example against
+NeevCloud, so add yours to the `recipes` or `examples` list in `.github/workflows/nightly.yml` and its
+sandbox name prefix to `.github/scripts/cleanup_sandboxes.py`. Make it exit non-zero when its check
+fails, so the nightly can tell.
 
 ## Reporting problems
 
