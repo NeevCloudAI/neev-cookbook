@@ -7,6 +7,8 @@ by checking it: the writer looks for the researcher's file and does not find it.
 
 import asyncio
 import os
+import sys
+import uuid
 
 from langchain.agents import create_agent
 from langchain_mcp_adapters.client import MultiServerMCPClient
@@ -22,9 +24,11 @@ MODEL_BASE_URL = os.environ["NEEV_MODEL_BASE_URL"]
 MODEL_API_KEY = os.environ["NEEV_MODEL_API_KEY"]
 MODEL_NAME = os.environ.get("NEEV_MODEL", "glm-4-7")
 
-# One sandbox per agent. Reuse a name to give two agents a shared filesystem.
-RESEARCHER_SANDBOX = "crew-researcher"
-WRITER_SANDBOX = "crew-writer"
+# One sandbox per agent. Reuse a name to give two agents a shared filesystem; the
+# random suffix keeps two runs of this example apart.
+_RUN = uuid.uuid4().hex[:6]
+RESEARCHER_SANDBOX = f"crew-researcher-{_RUN}"
+WRITER_SANDBOX = f"crew-writer-{_RUN}"
 
 # The connection publishes 22 tools. Give each agent only what its job needs.
 AGENT_TOOLS = {"exec", "fs_read", "fs_write"}
@@ -160,8 +164,8 @@ async def cleanup() -> None:
             print(f"  could not delete {name}: {exc}")
 
 
-async def main() -> None:
-    """Open both sandboxes, run researcher then writer, check the boundary."""
+async def main() -> int:
+    """Open both sandboxes, run researcher then writer, check the boundary; returns 1 unless isolated."""
     print("two agents, two sandboxes, one MCP URL\n")
 
     # Opening is inside the try as well: if the second sandbox fails to open, the
@@ -169,14 +173,15 @@ async def main() -> None:
     try:
         await open_sandbox(RESEARCHER_SANDBOX)
         await open_sandbox(WRITER_SANDBOX)
-        await run_crew()
+        verdict = await run_crew()
     finally:
         print()
         await cleanup()
+    return 0 if verdict == "ISOLATED" else 1
 
 
-async def run_crew() -> None:
-    """Run researcher -> writer, then verify isolation deterministically."""
+async def run_crew() -> str:
+    """Run researcher -> writer, then verify isolation deterministically; returns the verdict."""
     graph = StateGraph(CrewState)
     graph.add_node("researcher", researcher)
     graph.add_node("writer", writer)
@@ -186,8 +191,10 @@ async def run_crew() -> None:
     crew = graph.compile()
 
     await crew.ainvoke({"findings": "", "report": ""})
-    print(f"\n  isolation: {await check_isolation()}")
+    verdict = await check_isolation()
+    print(f"\n  isolation: {verdict}")
+    return verdict
 
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    sys.exit(asyncio.run(main()))

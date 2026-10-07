@@ -1,6 +1,6 @@
 name: nightly
 
-# Runs every recipe end to end against production each night, so a recipe that
+# Runs every recipe and example end to end against production each night, so one that
 # stops working is caught before a reader finds it.
 #
 # Needs, on a project used only for this check:
@@ -15,8 +15,6 @@ name: nightly
 #     per-agent attribution is covered by the recipe's unit tests only.
 #   - The keep-alive window of prompt-to-live-app: it runs with --keep 0; the URL is still
 #     checked, because the recipe waits until the URL answers before printing it.
-#   - The framework examples under examples/: they show integrations rather than results,
-#     and several need a third-party framework's own setup.
 
 on:
   schedule:
@@ -24,7 +22,7 @@ on:
   workflow_dispatch:
     inputs:
       recipes:
-        description: "Space-separated recipe names to run (empty runs all). A filtered run never opens or updates the failure issue."
+        description: "Space-separated recipe or example names to run (empty runs all). A filtered run never opens or updates the failure issue."
         required: false
         default: ""
 
@@ -40,6 +38,7 @@ env:
   NEEV_MODEL_API_KEY: ${{ secrets.NEEV_MODEL_API_KEY }}
   NEEV_ORG_ID: ${{ secrets.NEEV_ORG_ID }}
   NEEV_PROJECT_ID: ${{ secrets.NEEV_PROJECT_ID }}
+  NEEV_MODEL_BASE_URL: https://inference.ai.neevcloud.com/v1  # the framework examples read it; the recipes use it built in
 
 jobs:
   plan:
@@ -84,12 +83,28 @@ jobs:
               {"name": "undo-agent-mistake-js", "lang": "node", "cmd": "npm start"},
               {"name": "hosted-agent-python", "lang": "python", "cmd": "python hosted_agent.py"},
           ]
+          for r in recipes:
+              r["dir"] = f"recipes/{r['name']}"
+          examples = [
+              {"name": "hello-world-python", "lang": "python", "cmd": "python hello_world.py"},
+              {"name": "hello-world-js", "lang": "node", "cmd": "npm start"},
+              {"name": "network-egress-python", "lang": "python", "cmd": "python egress_allow_list.py"},
+              {"name": "langchain-python", "lang": "python", "cmd": "python sandbox_agent.py"},
+              {"name": "langgraph-python", "lang": "python", "cmd": "python multi_agent_sandboxes.py"},
+              {"name": "crewai-python", "lang": "python", "cmd": "python sandboxed_crew.py"},
+              {"name": "openai-agents-sdk-python", "lang": "python", "cmd": "python sandbox_agent.py"},
+              {"name": "vercel-ai-sdk-js", "lang": "node", "cmd": "npm start"},
+              {"name": "playwright-python", "lang": "python", "cmd": "python browser_in_sandbox.py"},
+          ]
+          for e in examples:
+              e["dir"] = f"examples/{e['name']}"
+          recipes += examples
           wanted = os.environ.get("FILTER", "").split()
           unknown = sorted(set(wanted) - {r["name"] for r in recipes})
           if unknown:
-              raise SystemExit(f"unknown recipes: {' '.join(unknown)}")
+              raise SystemExit(f"unknown recipes or examples: {' '.join(unknown)}")
           # A recipe listed here before its folder lands on this branch is skipped, not failed.
-          present = [r for r in recipes if os.path.isdir(os.path.join("recipes", r["name"]))]
+          present = [r for r in recipes if os.path.isdir(r["dir"])]
           absent = sorted(set(wanted) - {r["name"] for r in present})
           if absent:
               raise SystemExit(f"not on this branch: {' '.join(absent)}")
@@ -117,11 +132,11 @@ jobs:
         with:
           node-version: "22"
       - name: Install
-        working-directory: recipes/${{ matrix.name }}
+        working-directory: ${{ matrix.dir }}
         run: |
           if [ "${{ matrix.lang }}" = python ]; then pip install -q -r requirements.txt; else npm install --no-audit --no-fund; fi
       - name: Run
-        run: .github/scripts/run_recipe.sh "${{ matrix.name }}" "recipes/${{ matrix.name }}" sh -c "${{ matrix.cmd }}"
+        run: .github/scripts/run_recipe.sh "${{ matrix.name }}" "${{ matrix.dir }}" sh -c "${{ matrix.cmd }}"
       - if: always()
         uses: actions/upload-artifact@v4
         with:
