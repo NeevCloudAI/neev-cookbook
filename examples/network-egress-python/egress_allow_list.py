@@ -49,11 +49,14 @@ def main() -> int:
         denied.wait_until_ready()
         print("  two sandboxes ready\n")
 
-        # (sandbox, host, what the policy says should happen)
-        checks = [(allowed, ALLOWED_HOST, True), (allowed, BLOCKED_HOST, False), (denied, ALLOWED_HOST, False)]
-        labels = ["allow-listed sandbox", "allow-listed sandbox", "default sandbox     "]
+        # (label, sandbox, host, whether the policy lets it through)
+        checks = [
+            ("allow-listed sandbox", allowed, ALLOWED_HOST, True),
+            ("allow-listed sandbox", allowed, BLOCKED_HOST, False),
+            ("default sandbox     ", denied, ALLOWED_HOST, False),
+        ]
         results = []
-        for label, (sandbox, host, expected) in zip(labels, checks):
+        for label, sandbox, host, expected in checks:
             reached = can_reach(sandbox, host)
             print(f"  {label} -> {host} : {reached}")
             results.append(reached == expected)
