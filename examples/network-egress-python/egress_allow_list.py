@@ -9,6 +9,7 @@ checks both from the inside.
 """
 
 import os
+import sys
 import uuid
 
 from neevai import NeevAI
@@ -30,8 +31,8 @@ def can_reach(sandbox, host: str) -> bool:
     return code.isdigit() and code != "000"
 
 
-def main() -> None:
-    """Compare an allow-listed sandbox against one that may reach nothing."""
+def main() -> int:
+    """Compare an allow-listed sandbox against one that may reach nothing; returns 1 if either leaks."""
     suffix = uuid.uuid4().hex[:8]
 
     allowed = client.sandboxes.create(
@@ -40,22 +41,32 @@ def main() -> None:
             "egress": {"mode": "allow_list", "allow": [{"host": ALLOWED_HOST}]},
         }
     )
-    # Omitting egress entirely is the secure default: deny everything.
-    denied = client.sandboxes.create({"name": f"egress-deny-{suffix}"})
-
-    allowed.wait_until_ready()
-    denied.wait_until_ready()
-    print("  two sandboxes ready\n")
-
+    denied = None
     try:
-        print(f"  allow-listed sandbox -> {ALLOWED_HOST} : {can_reach(allowed, ALLOWED_HOST)}")
-        print(f"  allow-listed sandbox -> {BLOCKED_HOST} : {can_reach(allowed, BLOCKED_HOST)}")
-        print(f"  default sandbox      -> {ALLOWED_HOST} : {can_reach(denied, ALLOWED_HOST)}")
+        # Omitting egress entirely is the secure default: deny everything.
+        denied = client.sandboxes.create({"name": f"egress-deny-{suffix}"})
+        allowed.wait_until_ready()
+        denied.wait_until_ready()
+        print("  two sandboxes ready\n")
+
+        # (sandbox, host, what the policy says should happen)
+        checks = [(allowed, ALLOWED_HOST, True), (allowed, BLOCKED_HOST, False), (denied, ALLOWED_HOST, False)]
+        labels = ["allow-listed sandbox", "allow-listed sandbox", "default sandbox     "]
+        results = []
+        for label, (sandbox, host, expected) in zip(labels, checks):
+            reached = can_reach(sandbox, host)
+            print(f"  {label} -> {host} : {reached}")
+            results.append(reached == expected)
     finally:
         allowed.delete()
-        denied.delete()
+        if denied is not None:
+            denied.delete()
         print("\n  both sandboxes deleted")
+    if not all(results):
+        print("  UNEXPECTED: a sandbox reached a host its policy blocks, or missed one it allows")
+        return 1
+    return 0
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())
