@@ -4,6 +4,7 @@ import { appendFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 import { pathToFileURL } from "node:url";
+import { createInterface } from "node:readline";
 import { parseArgs } from "node:util";
 import { AgentFailed, runAgent, type ModelLike, type SessionLike } from "./agent.ts";
 import { MAX_ENTRIES, collectChanges, exportChanges, makeActivity, printable, toMarkdown, toTerminal, type AuditRecord, type Entry } from "./review.ts";
@@ -236,6 +237,27 @@ async function cleanup(neev: NeevLike, sandbox: any, name: string, log: (s: stri
   }
 }
 
+// lineReader asks questions on a terminal or a pipe. Lines typed before a prompt are kept, so `echo y |` answers it;
+// a prompt fails once stdin closes or signal fires, so a run without a terminal rejects instead of waiting forever.
+export function lineReader(input: NodeJS.ReadableStream, output: NodeJS.WritableStream, signal?: AbortSignal) {
+  // terminal: false leaves the terminal in its normal mode, so Ctrl+C still reaches the process as SIGINT.
+  const rl = createInterface({ input, output, terminal: false });
+  const lines: string[] = [];
+  let closed = false;
+  let waiting: { resolve: (l: string) => void; reject: (e: Error) => void } | undefined;
+  rl.on("line", (l) => { if (waiting) { waiting.resolve(l); waiting = undefined; } else lines.push(l); });
+  rl.on("close", () => { closed = true; waiting?.reject(new Error("stdin is closed")); waiting = undefined; });
+  signal?.addEventListener("abort", () => { waiting?.reject(signal.reason); waiting = undefined; }, { once: true });
+  const ask = (prompt: string) => {
+    if (lines.length) { output.write(prompt + "\n"); return Promise.resolve(lines.shift()!); }
+    if (closed) return Promise.reject(new Error("stdin is closed"));
+    if (signal?.aborted) return Promise.reject(signal.reason);
+    output.write(prompt);
+    return new Promise<string>((resolve, reject) => { waiting = { resolve, reject }; });
+  };
+  return { ask, close: () => rl.close() };
+}
+
 // main parses arguments, checks the environment, and runs the recipe with Ctrl+C wired to cleanup.
 async function main(): Promise<number> {
   let values: { approve?: boolean; reject?: boolean; review?: string; out?: string }, positionals: string[];
@@ -255,10 +277,9 @@ async function main(): Promise<number> {
   // Keep the handler for repeated presses, so a second Ctrl+C cannot skip the cleanup.
   process.on("SIGINT", () => ac.abort());
   const decision = values.approve ? "approve" : values.reject ? "reject" : null;
-  // Only an interactive run asks. readline swallows Ctrl+C, so route it to the same abort.
-  const rl = decision === null ? (await import("node:readline/promises")).createInterface({ input: process.stdin, output: process.stdout }) : undefined;
-  rl?.on("SIGINT", () => ac.abort());
-  const ask = rl ? (prompt: string) => rl.question(prompt, { signal: ac.signal }) : undefined;
+  // Only a run without --approve or --reject asks.
+  const rl = decision === null ? lineReader(process.stdin, process.stdout, ac.signal) : undefined;
+  const ask = rl?.ask;
   const modelClient = new OpenAI({ baseURL: MODEL_BASE_URL, apiKey: process.env.NEEV_MODEL_API_KEY });
   try {
     return await run(positionals[0] ?? DEFAULT_TASK, values.review!, values.out!, decision, new Neev() as unknown as NeevLike,

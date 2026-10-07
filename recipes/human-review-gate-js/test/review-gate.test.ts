@@ -4,7 +4,8 @@ import { existsSync, mkdtempSync, readFileSync, readdirSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, relative } from "node:path";
 import { test } from "node:test";
-import { AUDIT_WAIT_MS, PROJECT, missingEnv, readTrail, run, type Connect } from "../review-gate.ts";
+import { PassThrough } from "node:stream";
+import { AUDIT_WAIT_MS, PROJECT, lineReader, missingEnv, readTrail, run, type Connect } from "../review-gate.ts";
 import { FakeSandbox, fakeModel, fakeSession, toolCall } from "./fakes.ts";
 
 const VALIDATED = PROJECT["signup.py"].replace("def create_user(email, age):\n",
@@ -283,4 +284,41 @@ test("--approve and --reject cannot both be given", () => {
   const r = spawnSync(process.execPath, ["--import", "tsx", "review-gate.ts", "--approve", "--reject"], { cwd: new URL("..", import.meta.url), encoding: "utf8" });
   assert.equal(r.status, 2);
   assert.match(r.stderr, /--approve and --reject/);
+});
+
+// reader wires lineReader to an in-memory stdin.
+const reader = (signal?: AbortSignal) => {
+  const input = new PassThrough();
+  return { input, ...lineReader(input, new PassThrough(), signal) };
+};
+
+test("an answer typed before the prompt is kept, as with a piped 'echo y'", async () => {
+  const r = reader();
+  r.input.write("y\n");
+  await new Promise((res) => setImmediate(res));
+  assert.equal(await r.ask("Approve? "), "y");
+  r.close();
+});
+
+test("stdin closing while the prompt waits ends the wait instead of hanging", async () => {
+  const r = reader();
+  const answer = r.ask("Approve? ");
+  r.input.end();
+  await assert.rejects(answer, /stdin is closed/);
+});
+
+test("a prompt after stdin closed fails at once", async () => {
+  const r = reader();
+  r.input.end();
+  await new Promise((res) => setImmediate(res));
+  await assert.rejects(r.ask("Approve? "), /stdin is closed/);
+});
+
+test("Ctrl+C ends a waiting prompt", async () => {
+  const ac = new AbortController();
+  const r = reader(ac.signal);
+  const answer = r.ask("Approve? ");
+  ac.abort();
+  await assert.rejects(answer);
+  r.close();
 });

@@ -22,7 +22,7 @@ npm start
 
 On Windows, see the [setup guide](../../docs/setup.md#windows).
 
-The review prints to the terminal and is saved to `review.md`, then you are asked `Approve this change? [y/N]`. Only `y` or `yes` approves. In CI, pass `npm start -- --approve` or `-- --reject` instead of answering.
+The review prints to the terminal and is saved to `review.md`, then you are asked `Approve this change? [y/N]`. Only `y` or `yes` approves, and with no terminal to answer from the change is rejected. In CI, pass `npm start -- --approve` or `-- --reject` instead of answering.
 
 ## How it works
 
