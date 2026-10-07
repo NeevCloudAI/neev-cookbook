@@ -84,6 +84,7 @@ jobs:
               {"name": "hosted-agent-python", "lang": "python", "cmd": "python hosted_agent.py"},
               {"name": "human-review-gate-js", "lang": "node", "cmd": "npm start -- --reject"},
               {"name": "ai-data-analyst-js", "lang": "node", "cmd": "npm start"},
+              {"name": "best-of-n-fork-js", "lang": "node", "cmd": "npm start"},
           ]
           for r in recipes:
               r["dir"] = f"recipes/{r['name']}"
