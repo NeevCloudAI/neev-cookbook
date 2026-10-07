@@ -38,6 +38,6 @@ Output:
 - A sandbox created with no `egress` at all denies everything. That is the default, so code that is talked into sending data somewhere has nowhere to send it.
 - A blocked host does not fail DNS; the connection simply times out, which is why the check uses a short `curl -m 8`.
 
-Set `ALLOWED_HOST` or `BLOCKED_HOST` to try other hosts. Both sandboxes are deleted at the end, also when a check fails.
+Set `ALLOWED_HOST` or `BLOCKED_HOST` to try other hosts. Both sandboxes are deleted at the end, also when a check fails, and the script exits 1 if any result differs from the policy.
 
 For the same boundary holding against a prompt-injected agent, see the [injection-proof agent recipe](../../recipes/injection-proof-agent-python).

@@ -46,8 +46,8 @@ Expected output:
 ```
 two agents, two sandboxes, one MCP URL
 
-  created crew-researcher
-  created crew-writer
+  created crew-researcher-ea37ee
+  created crew-writer-ea37ee
   researcher: Linux x86_64
   writer: NOT FOUND
 
@@ -56,9 +56,11 @@ two agents, two sandboxes, one MCP URL
 
   isolation: ISOLATED
 
-  deleted crew-researcher
-  deleted crew-writer
+  deleted crew-researcher-ea37ee
+  deleted crew-writer-ea37ee
 ```
+
+The script exits 1 unless the isolation check says `ISOLATED`.
 
 ## Connecting
 
