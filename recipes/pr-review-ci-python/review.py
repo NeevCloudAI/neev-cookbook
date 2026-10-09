@@ -250,7 +250,8 @@ def run(repo: str, number: int, test_cmd: str, registries: list[str], post: bool
         sandbox.wait_until_ready(timeout_ms=300_000)
         log("3. Fetching the pull request into the sandbox...")
         diff = fetch_pull_request(sandbox, repo, pr, github.token)
-        log(f"   {diff.count(chr(10))} diff lines; the token was used for this step only and never stored")
+        token_note = "; the GitHub token was used for this step only and never stored" if github.token else ""
+        log(f"   {diff.count(chr(10))} diff lines{token_note}")
         close_git_access(sandbox)
         log(f"   Removed {GIT_HOST} from the allow-list: the pull request's code can reach only "
             f"{', '.join(registries) or 'nothing'}")

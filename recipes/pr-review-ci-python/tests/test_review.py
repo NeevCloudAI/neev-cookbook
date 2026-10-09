@@ -216,6 +216,7 @@ def test_success_run_prints_the_comment_and_deletes_the_sandbox():
     assert params["name"].startswith("pr-review-") and params["lifecycle"]["on_idle"] == "delete"
     assert any(line.startswith(COMMENT_MARKER) for line in lines)
     assert [r[0] for r in api.requests] == ["GET"]  # read the pull request, posted nothing
+    assert "   2 diff lines; the GitHub token was used for this step only and never stored" in lines
 
 
 def test_success_github_access_is_removed_before_the_tests_run():

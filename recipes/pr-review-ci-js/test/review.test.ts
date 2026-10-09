@@ -200,6 +200,7 @@ describe("the whole run", () => {
     assert.equal((created[0].lifecycle as Record<string, unknown>).on_idle, "delete");
     assert.ok(lines.some((l) => l.startsWith(COMMENT_MARKER)));
     assert.deepEqual(gh.requests.map((r) => r.method), ["GET"]); // read the pull request, posted nothing
+    assert.ok(lines.includes("   2 diff lines; the GitHub token was used for this step only and never stored"));
   });
 
   it("success: GitHub access is removed before the tests run", async () => {

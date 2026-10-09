@@ -2,6 +2,10 @@
 
 Review every pull request with a model and run its tests, without running the pull request's code on your CI runner. A GitHub Action fetches the pull request into a NeevCloud sandbox, a model reviews the diff, the tests run in the sandbox with only your package registry reachable, and the result lands as one comment on the pull request.
 
+<p align="center">
+  <img src="../../assets/runs/pr-review-ci-python.gif" alt="A real run of this recipe, recorded in a terminal" width="720">
+</p>
+
 ## Run it
 
 You need Python 3.11+, a **Sandboxes** and a **Model API** key ([create a key](https://docs.ai.neevcloud.com/getting-started/create-api-key)), and your [organization and project IDs](https://docs.ai.neevcloud.com/getting-started/org-and-project).
@@ -63,4 +67,4 @@ The workflow checks out only `.github/pr-review/`, from the base branch, so the 
 
 ## Time and cost
 
-About a minute for the demo: roughly 15 seconds to create the sandbox and fetch, 30 seconds for the review and a few seconds for the tests. You pay for sandbox time (1 vCPU, 2 GB) and one model call per run. The sandbox is deleted when the script ends, fails or the job is cancelled; if the runner is killed outright, the sandbox deletes itself after 30 minutes. A leftover sandbox's name starts with `pr-review-`.
+Under a minute for the demo (41 to 47 seconds on real runs): 10 to 15 seconds to create the sandbox and fetch, 30 seconds for the review and a few seconds for the tests. You pay for sandbox time (1 vCPU, 2 GB) and one model call per run. The sandbox is deleted when the script ends, fails or the job is cancelled; if the runner is killed outright, the sandbox deletes itself after 30 minutes. A leftover sandbox's name starts with `pr-review-`.

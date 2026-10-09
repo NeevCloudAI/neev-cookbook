@@ -259,7 +259,8 @@ export async function run(o: RunOptions): Promise<number> {
     await sandbox.waitUntilReady({ timeoutMs: 300_000 });
     log("3. Fetching the pull request into the sandbox...");
     const diff = await fetchPullRequest(sandbox, o.repo, pr, o.github.token, { sleep: o.sleep, signal });
-    log(`   ${diff.split("\n").length - 1} diff lines; the token was used for this step only and never stored`);
+    const tokenNote = o.github.token ? "; the GitHub token was used for this step only and never stored" : "";
+    log(`   ${diff.split("\n").length - 1} diff lines${tokenNote}`);
     await closeGitAccess(sandbox);
     log(`   Removed ${GIT_HOST} from the allow-list: the pull request's code can reach only ${o.registries.join(", ") || "nothing"}`);
     log(`4. Reviewing the diff with ${o.model}...`);
