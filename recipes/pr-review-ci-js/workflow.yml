@@ -1,0 +1,42 @@
+# Reviews every pull request and runs its tests in a NeevCloud sandbox.
+# Copy this file to .github/workflows/pr-review.yml, and review.ts, package.json and tsconfig.json to .github/pr-review/.
+# Add the repository secrets NEEV_API_KEY, NEEV_MODEL_API_KEY, NEEV_ORG_ID and NEEV_PROJECT_ID.
+name: PR review
+
+on:
+  pull_request:
+
+permissions:
+  contents: read
+  pull-requests: write # to post the review comment
+
+concurrency:
+  group: pr-review-${{ github.event.pull_request.number }}
+  cancel-in-progress: true # a new push replaces the run for the old one
+
+jobs:
+  review:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: .github/pr-review
+    steps:
+      # Only the script is checked out, from the base branch: the pull request's code never runs on this runner,
+      # and a pull request cannot change the script that holds the keys.
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.base.sha }}
+          sparse-checkout: .github/pr-review
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - run: npm install --no-audit --no-fund
+      - run: npm start -- --test-cmd "npm ci && npm test"
+        env:
+          NEEV_API_KEY: ${{ secrets.NEEV_API_KEY }}
+          NEEV_MODEL_API_KEY: ${{ secrets.NEEV_MODEL_API_KEY }}
+          NEEV_ORG_ID: ${{ secrets.NEEV_ORG_ID }}
+          NEEV_PROJECT_ID: ${{ secrets.NEEV_PROJECT_ID }}
+          GITHUB_TOKEN: ${{ github.token }}

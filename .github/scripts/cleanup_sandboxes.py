@@ -11,7 +11,7 @@ PREFIXES = ("live-app-", "coding-agent-", "session-report-", "injection-proof-",
             "undo-mistake-", "best-of-n-", "data-analyst-", "crew-", "mcp-undo-",
             "safe-install-", "evidence-", "sleepy-agent-", "golden-", "grader-", "code-runner-",
             "review-gate-", "debug-fail-", "egress-approval-", "tutor-", "report-gen-", "fix-test-",
-            "code-mode-", "quarantine-", "eval-roll-", "hosted-agent-",
+            "code-mode-", "quarantine-", "eval-roll-", "hosted-agent-", "pr-review-",
             # examples; "crew-" above also covers crewai-python and langgraph-python
             "hello-world-", "egress-allow-", "egress-deny-", "lc-", "oa-", "pw-", "ai-sdk-")
 PAGE = 100
