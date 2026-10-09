@@ -29,6 +29,8 @@ const REVIEW_BUDGET_MS = 180_000;
 export const MAX_DIFF_CHARS = 60_000; // larger diffs are cut, and the review says so
 const MAX_LOG_CHARS = 4_000; // the end of the test output that goes into the comment
 export const COMMENT_MARKER = "<!-- neev-pr-review -->"; // finds this recipe's own comment, so each push updates it
+const ACTIONS_BOT = "github-actions[bot]"; // who comments when the token is a workflow's GITHUB_TOKEN
+export const MAX_REVIEW_CHARS = 50_000; // keeps the whole comment under GitHub's 65,536-character limit
 
 const REPO_RE = /^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/;
 const SHA_RE = /^[0-9a-f]{40}$/;
@@ -106,11 +108,23 @@ export class GitHub {
     return { title: pr.title ?? "", base, head };
   }
 
+  // author is the login comments are posted as: the token's user, or the Actions bot, whose token cannot read /user.
+  async author(): Promise<string> {
+    try {
+      return (await this.request("GET", "/user")).login;
+    } catch (e) {
+      if (e instanceof ReviewError) return ACTIONS_BOT;
+      throw e;
+    }
+  }
+
   // upsertComment updates this recipe's earlier comment on the pull request, or adds one; returns the comment's URL.
+  // A comment counts as ours only if we wrote it, so anyone can quote the marker without their comment being overwritten.
   async upsertComment(number: number, body: string): Promise<string> {
+    const author = await this.author();
     for (let page = 1; ; page++) {
-      const comments: { id: number; body?: string }[] = await this.request("GET", `/repos/${this.repo}/issues/${number}/comments?per_page=100&page=${page}`);
-      const mine = comments.find((c) => (c.body ?? "").includes(COMMENT_MARKER));
+      const comments: { id: number; body?: string; user?: { login?: string } }[] = await this.request("GET", `/repos/${this.repo}/issues/${number}/comments?per_page=100&page=${page}`);
+      const mine = comments.find((c) => (c.body ?? "").includes(COMMENT_MARKER) && c.user?.login === author);
       if (mine) return (await this.request("PATCH", `/repos/${this.repo}/issues/comments/${mine.id}`, { body })).html_url;
       if (comments.length < 100) break;
     }
@@ -177,7 +191,7 @@ export async function reviewDiff(modelClient: ModelLike, model: string, title: s
       { role: "user", content: `Pull request title: ${title}\n\n<diff>\n${diff}\n</diff>` }],
   }, { timeout: REVIEW_BUDGET_MS, signal });
   const text = (response.choices[0]?.message.content ?? "").replace(/<think>[\s\S]*?<\/think>/g, "").trim();
-  return (text || "The model returned an empty review.") + note;
+  return (text || "The model returned an empty review.").slice(0, MAX_REVIEW_CHARS) + note;
 }
 
 // runTests runs the test command in the checkout, streaming its output; returns [exit code, end of the output].
@@ -206,7 +220,7 @@ export async function runTests(sandbox: SandboxLike, testCmd: string, log: Log, 
 }
 
 // quietMentions stops an @name in model output from notifying a GitHub user.
-const quietMentions = (text: string) => text.replace(/@(?=[A-Za-z0-9])/g, "@​");
+const quietMentions = (text: string) => text.replace(/@(?=[A-Za-z0-9])/g, "@\u200b");
 
 // fence is a code fence longer than any backtick run in the text, so test output cannot close it early.
 function fence(text: string): string {

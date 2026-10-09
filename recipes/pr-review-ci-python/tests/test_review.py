@@ -169,8 +169,9 @@ def test_failure_github_error_is_one_line():
 
 def test_success_upsert_updates_this_recipes_earlier_comment():
     api = FakeGitHubAPI({
-        ("GET", "/repos/o/r/issues/7/comments?per_page=100&page=1"): [{"id": 1, "body": "lgtm"},
-                                                                       {"id": 2, "body": f"{COMMENT_MARKER}\nold"}],
+        ("GET", "/repos/o/r/issues/7/comments?per_page=100&page=1"): [
+            {"id": 1, "body": "lgtm", "user": {"login": "octocat"}},
+            {"id": 2, "body": f"{COMMENT_MARKER}\nold", "user": {"login": "github-actions[bot]"}}],
         ("PATCH", "/repos/o/r/issues/comments/2"): {"html_url": "https://github.com/o/r/pull/7#c2"},
     })
     assert GitHub("o/r", "t", urlopen=api).upsert_comment(7, "new") == "https://github.com/o/r/pull/7#c2"
@@ -184,7 +185,24 @@ def test_success_upsert_pages_then_posts_when_there_is_no_earlier_comment():
         ("POST", "/repos/o/r/issues/7/comments"): {"html_url": "https://github.com/o/r/pull/7#c9"},
     })
     assert GitHub("o/r", "t", urlopen=api).upsert_comment(7, "new") == "https://github.com/o/r/pull/7#c9"
-    assert [r[0] for r in api.requests] == ["GET", "GET", "POST"]
+    assert [r[0] for r in api.requests] == ["GET", "GET", "GET", "POST"]  # /user, two pages, post
+
+
+def test_failure_upsert_never_edits_someone_elses_comment_that_quotes_the_marker():
+    api = FakeGitHubAPI({
+        ("GET", "/user"): {"login": "maintainer"},
+        ("GET", "/repos/o/r/issues/7/comments?per_page=100&page=1"): [
+            {"id": 3, "body": f"{COMMENT_MARKER} gotcha", "user": {"login": "attacker"}},
+            {"id": 4, "body": f"{COMMENT_MARKER}\nold", "user": {"login": "maintainer"}}],
+        ("PATCH", "/repos/o/r/issues/comments/4"): {"html_url": "https://github.com/o/r/pull/7#c4"},
+    })
+    assert GitHub("o/r", "t", urlopen=api).upsert_comment(7, "new") == "https://github.com/o/r/pull/7#c4"
+    assert ("PATCH", "/repos/o/r/issues/comments/3") not in [(r[0], r[1]) for r in api.requests]
+
+
+def test_success_review_is_capped_to_fit_a_comment():
+    text = review_diff(FakeModel(reply="x" * (review.MAX_REVIEW_CHARS + 500)), "m", "t", "+x\n")
+    assert len(text) == review.MAX_REVIEW_CHARS
 
 
 # --- the whole run -----------------------------------------------------------------------------

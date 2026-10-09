@@ -37,6 +37,8 @@ REVIEW_BUDGET_S = 180.0
 MAX_DIFF_CHARS = 60_000   # larger diffs are cut, and the review says so
 MAX_LOG_CHARS = 4_000     # the end of the test output that goes into the comment
 COMMENT_MARKER = "<!-- neev-pr-review -->"  # finds this recipe's own comment, so each push updates it
+ACTIONS_BOT = "github-actions[bot]"          # who comments when the token is a workflow's GITHUB_TOKEN
+MAX_REVIEW_CHARS = 50_000  # keeps the whole comment under GitHub's 65,536-character limit
 
 REPO_RE = re.compile(r"^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$")
 SHA_RE = re.compile(r"^[0-9a-f]{40}$")
@@ -104,13 +106,25 @@ class GitHub:
             raise ReviewError("GitHub returned an unexpected commit id")
         return {"title": pr.get("title") or "", "base": base, "head": head}
 
+    def author(self) -> str:
+        """The login comments are posted as: the token's user, or the Actions bot, whose token cannot read /user."""
+        try:
+            return self._request("GET", "/user")["login"]
+        except ReviewError:
+            return ACTIONS_BOT
+
     def upsert_comment(self, number: int, body: str) -> str:
-        """Updates this recipe's earlier comment on the pull request, or adds one; returns the comment's URL."""
+        """Updates this recipe's earlier comment on the pull request, or adds one; returns the comment's URL.
+
+        A comment counts as ours only if we wrote it, so anyone can quote the marker without their comment
+        being overwritten."""
+        author = self.author()
         page = 1
         while True:
             comments = self._request("GET", f"/repos/{self.repo}/issues/{number}/comments?per_page=100&page={page}")
             for comment in comments:
-                if COMMENT_MARKER in (comment.get("body") or ""):
+                if (COMMENT_MARKER in (comment.get("body") or "")
+                        and (comment.get("user") or {}).get("login") == author):
                     return self._request("PATCH", f"/repos/{self.repo}/issues/comments/{comment['id']}",
                                          {"body": body})["html_url"]
             if len(comments) < 100:
@@ -176,7 +190,7 @@ def review_diff(model_client, model: str, title: str, diff: str) -> str:
         messages=[{"role": "system", "content": REVIEW_PROMPT},
                   {"role": "user", "content": f"Pull request title: {title}\n\n<diff>\n{diff}\n</diff>"}])
     text = re.sub(r"<think>.*?</think>", "", response.choices[0].message.content or "", flags=re.DOTALL).strip()
-    return (text or "The model returned an empty review.") + note
+    return (text or "The model returned an empty review.")[:MAX_REVIEW_CHARS] + note
 
 
 def run_tests(sandbox, test_cmd: str, log: Log) -> tuple[int, str]:
@@ -203,7 +217,7 @@ def run_tests(sandbox, test_cmd: str, log: Log) -> tuple[int, str]:
 
 def _quiet_mentions(text: str) -> str:
     """Stops an @name in model output from notifying a GitHub user."""
-    return re.sub(r"@(?=[A-Za-z0-9])", "@​", text)
+    return re.sub(r"@(?=[A-Za-z0-9])", "@\u200b", text)
 
 
 def _fence(text: str) -> str:

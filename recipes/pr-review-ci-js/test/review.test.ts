@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, it } from "node:test";
 import {
-  COMMENT_MARKER, GitHub, MAX_DIFF_CHARS, REPO_DIR, commentBody, fetchPullRequest, gitAuthEnv, main, missingEnv,
+  COMMENT_MARKER, GitHub, MAX_DIFF_CHARS, MAX_REVIEW_CHARS, REPO_DIR, commentBody, fetchPullRequest, gitAuthEnv, main, missingEnv,
   prFromActions, reviewDiff, run, runTests, waitForHost,
 } from "../review.ts";
 import { BASE, HEAD, fakeGitHub, fakeModel, fakeNeev, fakeSandbox, type FakeSandbox } from "./fakes.ts";
@@ -97,6 +97,11 @@ describe("review and tests", () => {
     assert.ok(calls[0].messages[1].content.length < MAX_DIFF_CHARS + 100);
   });
 
+  it("success: review is capped to fit a comment", async () => {
+    const { model } = fakeModel("x".repeat(MAX_REVIEW_CHARS + 500));
+    assert.equal((await reviewDiff(model, "m", "t", "+x\n")).length, MAX_REVIEW_CHARS);
+  });
+
   it("success: review of an empty diff skips the model", async () => {
     const { model, calls } = fakeModel();
     assert.match(await reviewDiff(model, "m", "t", "  \n"), /no changes/);
@@ -132,7 +137,7 @@ describe("the comment", () => {
 
   it("success: quiets mentions and cannot be closed by test output", () => {
     const body = commentBody("ping @octocat", "npm test", 0, "````\nsneaky\n", HEAD);
-    assert.ok(!body.includes("@octocat") && body.includes("@​octocat"));
+    assert.ok(!body.includes("@octocat") && body.includes("@\u200boctocat"));
     assert.ok(body.includes("`````\n````\nsneaky"));
   });
 });
@@ -155,7 +160,7 @@ describe("GitHub", () => {
 
   it("success: upsert updates this recipe's earlier comment", async () => {
     const gh = fakeGitHub({
-      "GET /repos/o/r/issues/7/comments?per_page=100&page=1": [{ id: 1, body: "lgtm" }, { id: 2, body: `${COMMENT_MARKER}\nold` }],
+      "GET /repos/o/r/issues/7/comments?per_page=100&page=1": [{ id: 1, body: "lgtm", user: { login: "octocat" } }, { id: 2, body: `${COMMENT_MARKER}\nold`, user: { login: "github-actions[bot]" } }],
       "PATCH /repos/o/r/issues/comments/2": { html_url: "https://github.com/o/r/pull/7#c2" },
     });
     assert.equal(await new GitHub("o/r", "t", gh.fetchFn).upsertComment(7, "new"), "https://github.com/o/r/pull/7#c2");
@@ -169,7 +174,19 @@ describe("GitHub", () => {
       "POST /repos/o/r/issues/7/comments": { html_url: "https://github.com/o/r/pull/7#c9" },
     });
     assert.equal(await new GitHub("o/r", "t", gh.fetchFn).upsertComment(7, "new"), "https://github.com/o/r/pull/7#c9");
-    assert.deepEqual(gh.requests.map((r) => r.method), ["GET", "GET", "POST"]);
+    assert.deepEqual(gh.requests.map((r) => r.method), ["GET", "GET", "GET", "POST"]); // /user, two pages, post
+  });
+
+  it("failure: upsert never edits someone else's comment that quotes the marker", async () => {
+    const gh = fakeGitHub({
+      "GET /user": { login: "maintainer" },
+      "GET /repos/o/r/issues/7/comments?per_page=100&page=1": [
+        { id: 3, body: `${COMMENT_MARKER} gotcha`, user: { login: "attacker" } },
+        { id: 4, body: `${COMMENT_MARKER}\nold`, user: { login: "maintainer" } }],
+      "PATCH /repos/o/r/issues/comments/4": { html_url: "https://github.com/o/r/pull/7#c4" },
+    });
+    assert.equal(await new GitHub("o/r", "t", gh.fetchFn).upsertComment(7, "new"), "https://github.com/o/r/pull/7#c4");
+    assert.ok(!gh.requests.some((r) => r.method === "PATCH" && r.path.endsWith("/comments/3")));
   });
 });
 
