@@ -74,6 +74,7 @@ In about a minute you get a public URL to an app an agent built inside a sandbox
 | **Live egress approval** | The agent asks for each host it needs and a person approves it into the live allow-list | [Python](recipes/egress-approval-python) |  |
 | **Run untrusted user code in your SaaS** | A small service that runs your users' code, one sandbox per user, with limits and cleanup |  | [TypeScript](recipes/untrusted-code-runner-js) |
 | **Code grader** | Grade untrusted submissions in parallel, one sandbox each, with cheating and network access blocked | [Python](recipes/code-grader-python) |  |
+| **Pull request review in CI** | A GitHub Action reviews each pull request with a model and runs its tests in a sandbox, not on the runner | [Python](recipes/pr-review-ci-python) | [TypeScript](recipes/pr-review-ci-js) |
 
 ### Snapshots, forks and rollback
 

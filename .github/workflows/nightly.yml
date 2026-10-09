@@ -86,6 +86,8 @@ jobs:
               {"name": "ai-data-analyst-js", "lang": "node", "cmd": "npm start"},
               {"name": "best-of-n-fork-js", "lang": "node", "cmd": "npm start"},
               {"name": "agent-session-report-js", "lang": "node", "cmd": "npm start -- --out ../../report.md"},
+              {"name": "pr-review-ci-python", "lang": "python", "cmd": "python review.py"},
+              {"name": "pr-review-ci-js", "lang": "node", "cmd": "npm start"},
           ]
           for r in recipes:
               r["dir"] = f"recipes/{r['name']}"
@@ -140,6 +142,9 @@ jobs:
         run: |
           if [ "${{ matrix.lang }}" = python ]; then pip install -q -r requirements.txt; else npm install --no-audit --no-fund; fi
       - name: Run
+        env:
+          # Read-only; pr-review-ci reads its demo pull request through the GitHub API with it.
+          GITHUB_TOKEN: ${{ github.token }}
         run: .github/scripts/run_recipe.sh "${{ matrix.name }}" "${{ matrix.dir }}" sh -c "${{ matrix.cmd }}"
       - if: always()
         uses: actions/upload-artifact@v4
