@@ -219,6 +219,21 @@ describe("inline comments", () => {
     assert.deepEqual(placed, [{ path: "cart.js", line: 7, side: "RIGHT", body: "b", start_line: 6, start_side: "RIGHT" }]);
   });
 
+  it("success: a suggestion that changes nothing is dropped", () => {
+    const [placed] = inlineComments([{ path: "cart.js", line: 7, body: "Pinned.", suggestion: "  return total - Number(code.slice(4));  " }], lines);
+    assert.equal(placed[0].body, "Pinned.");
+  });
+
+  it("failure: a comment that only asks for a check is dropped", () => {
+    for (const body of ["Ensure the label exists.", "verify this is intended", "Make sure it runs.", "Double-check the pin.", "Consider renaming."]) {
+      assert.deepEqual(inlineComments([{ path: "cart.js", line: 7, body }], lines), [[], []]);
+    }
+  });
+
+  it("success: a comment that mentions a check later is kept", () => {
+    assert.equal(inlineComments([{ path: "cart.js", line: 7, body: "This skips the check; ensure fails." }], lines)[0].length, 1);
+  });
+
   it("failure: a comment without a diff line goes to the body", () => {
     for (const c of [{ path: "cart.js", line: 2, body: "outside" }, { path: "other.js", line: 7, body: "not in the diff" },
       { path: "cart.js", line: 7, end_line: 6, body: "backwards" }, { path: "cart.js", line: 7, end_line: 30, body: "past the hunk" }]) {
