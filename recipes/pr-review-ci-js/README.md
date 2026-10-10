@@ -31,6 +31,7 @@ npm start -- --repo your-org/your-repo --pr 42 --dry-run
 
 - `--test-cmd`: what to run in the checkout (default `npm ci && npm test`), for example `pnpm install --frozen-lockfile && pnpm test`.
 - `--allow`: a host the tests may reach, repeatable (default `registry.npmjs.org`).
+- `--max-reviews`: reviews per pull request (default 3, `0` for no limit). After that, pushes are still tested and the check still follows the tests, but no new review is posted.
 - `--dry-run`: print the review instead of posting it. Without it, the script posts, and `GITHUB_TOKEN` must be able to write pull request reviews.
 
 ## Add it to your repository
@@ -39,7 +40,7 @@ npm start -- --repo your-org/your-repo --pr 42 --dry-run
 2. Add the repository secrets `NEEV_API_KEY`, `NEEV_MODEL_API_KEY`, `NEEV_ORG_ID` and `NEEV_PROJECT_ID`.
 3. Set `--test-cmd` (and `--allow`) in the workflow to match your project, and open a pull request.
 
-The workflow checks out only `.github/pr-review/`, from the base branch, so the runner never runs the pull request's code and a pull request cannot change the script that holds the keys. Each push gets its own review, the way a teammate re-reviews: comments on lines that changed since show as outdated, and re-running a job on the same commit does not post twice.
+The workflow checks out only `.github/pr-review/`, from the base branch, so the runner never runs the pull request's code and a pull request cannot change the script that holds the keys. Each push gets its own review, the way a teammate re-reviews, up to three per pull request. A later review is shown the earlier comments and your replies to them, so it does not raise the same point again, and the third one says it is the last. Re-running a job on the same commit does not post twice.
 
 ## How it works
 
@@ -52,7 +53,7 @@ The workflow checks out only `.github/pr-review/`, from the base branch, so the 
 ## Use it in your product
 
 - **Your stack:** change `DEFAULT_TEST_CMD` and `DEFAULT_REGISTRIES` in `review.ts` instead of passing flags.
-- **Your review style:** edit `REVIEW_PROMPT`, for example to check your team's conventions, and `MAX_COMMENTS` for longer or shorter reviews.
+- **Your review style:** edit `REVIEW_PROMPT`, for example to check your team's conventions, `MAX_COMMENTS` for longer or shorter reviews, and `MAX_REVIEWS` for how many rounds a pull request gets.
 - **More room:** raise `SANDBOX_RESOURCES` for builds that need more than 1 vCPU and 2 GB of memory, and `TEST_TIMEOUT_MS` for test suites that run longer than 10 minutes.
 - **Block on the review too:** the exit code follows the tests only; make `run()` return 1 when the review flags a problem if you want the check to fail on it.
 

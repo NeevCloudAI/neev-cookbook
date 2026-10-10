@@ -32,6 +32,8 @@ export const REVIEW_MARKER = "<!-- neev-pr-review -->"; // finds this recipe's o
 const ACTIONS_BOT = "github-actions[bot]"; // who reviews when the token is a workflow's GITHUB_TOKEN
 export const MAX_COMMENTS = 6; // inline comments per review, most important first
 const MAX_COMMENT_CHARS = 1_000; // per comment; a reviewer should take each in at a glance
+export const MAX_REVIEWS = 3; // reviews per pull request; later pushes are tested but not reviewed
+const MAX_PRIOR_CHARS = 6_000; // earlier comments shown to the model so it does not raise them again
 
 const REPO_RE = /^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/;
 const SHA_RE = /^[0-9a-f]{40}$/;
@@ -76,6 +78,12 @@ export interface ModelLike {
 }
 
 export interface PullRequest { title: string; base: string; head: string }
+
+// PriorComment is one of this recipe's earlier inline comments on the pull request, with the replies it got.
+export interface PriorComment { path: string; line: number; body: string; replies: string[] }
+
+// History is this recipe's earlier reviews of a pull request.
+export interface History { passes: number; reviewedHead: boolean; prior: PriorComment[] }
 
 // ReviewError is a failure with a one-line message for the reader, such as a pull request that cannot be found.
 export class ReviewError extends Error {}
@@ -132,16 +140,36 @@ export class GitHub {
     }
   }
 
-  // alreadyReviewed is true if this recipe already reviewed this commit, so a re-run of the job does not post twice.
-  // A review counts as ours only if we wrote it, so quoting the marker cannot suppress a review.
-  async alreadyReviewed(number: number, head: string): Promise<boolean> {
-    const author = await this.author();
+  // pages returns every item of a paged list endpoint.
+  private async pages(path: string): Promise<any[]> {
+    const items: any[] = [];
     for (let page = 1; ; page++) {
-      const reviews: { commit_id?: string; body?: string; user?: { login?: string } }[] =
-        await this.request("GET", `/repos/${this.repo}/pulls/${number}/reviews?per_page=100&page=${page}`);
-      if (reviews.some((r) => r.commit_id === head && (r.body ?? "").includes(REVIEW_MARKER) && r.user?.login === author)) return true;
-      if (reviews.length < 100) return false;
+      const batch: any[] = await this.request("GET", `${path}?per_page=100&page=${page}`);
+      items.push(...batch);
+      if (batch.length < 100) return items;
     }
+  }
+
+  // history returns this recipe's earlier reviews of the pull request: how many there were, whether one is of this
+  // head commit, and their inline comments with the replies they got.
+  // A review counts as ours only if we wrote it, so quoting the marker cannot suppress or fake one.
+  async history(number: number, head: string): Promise<History> {
+    const author = await this.author();
+    const ours = (await this.pages(`/repos/${this.repo}/pulls/${number}/reviews`))
+      .filter((r) => (r.body ?? "").includes(REVIEW_MARKER) && r.user?.login === author);
+    let prior: PriorComment[] = [];
+    if (ours.length) {
+      const ids = new Set(ours.map((r) => r.id));
+      const comments = await this.pages(`/repos/${this.repo}/pulls/${number}/comments`);
+      const replies = new Map<number, string[]>();
+      for (const c of comments) {
+        if (c.in_reply_to_id) replies.set(c.in_reply_to_id, [...(replies.get(c.in_reply_to_id) ?? []), (c.body ?? "").slice(0, 300)]);
+      }
+      prior = comments.filter((c) => ids.has(c.pull_request_review_id) && !c.in_reply_to_id).map((c) => ({
+        path: c.path, line: c.line ?? c.original_line, body: (c.body ?? "").slice(0, 300), replies: replies.get(c.id) ?? [],
+      }));
+    }
+    return { passes: ours.length, reviewedHead: ours.some((r) => r.commit_id === head), prior };
   }
 
   // postReview posts a review on the head commit with inline comments; returns the review's URL.
@@ -262,8 +290,19 @@ function findings(text: string): [string, Finding[]] {
   return [String(data.summary ?? "").slice(0, MAX_COMMENT_CHARS), comments.slice(0, MAX_COMMENTS)];
 }
 
+// priorNote lists earlier comments and their replies for the model, so a later review does not raise them again.
+export function priorNote(prior: PriorComment[]): string {
+  if (!prior.length) return "";
+  const squash = (text: string) => text.split(/\s+/).join(" ").trim();
+  const lines = prior.flatMap((c) => [`- ${c.path}:${c.line} ${squash(c.body)}`, ...c.replies.map((r) => `  reply: ${squash(r)}`)]);
+  return "\n\nAlready raised in earlier reviews of this pull request, with the author's replies. Do not raise " +
+    `these again, even reworded or on another line:\n${lines.join("\n").slice(0, MAX_PRIOR_CHARS)}`;
+}
+
 // reviewDiff asks the model for a review of the numbered diff; returns [summary, comments, commentable lines].
-export async function reviewDiff(modelClient: ModelLike, model: string, title: string, diff: string, signal?: AbortSignal): Promise<[string, Finding[], Commentable]> {
+// prior holds earlier comments on the pull request, which the model is told not to raise again.
+export async function reviewDiff(modelClient: ModelLike, model: string, title: string, diff: string, signal?: AbortSignal,
+  prior: PriorComment[] = []): Promise<[string, Finding[], Commentable]> {
   let [numbered, commentable] = numberDiff(diff);
   if (!Object.keys(commentable).length) return ["The pull request has no changes to review.", [], commentable];
   let note = "";
@@ -274,7 +313,7 @@ export async function reviewDiff(modelClient: ModelLike, model: string, title: s
   const response = await modelClient.chat.completions.create({
     model,
     messages: [{ role: "system", content: REVIEW_PROMPT },
-      { role: "user", content: `Pull request title: ${title}\n\n<diff>\n${numbered}\n</diff>` }],
+      { role: "user", content: `Pull request title: ${title}${priorNote(prior)}\n\n<diff>\n${numbered}\n</diff>` }],
   }, { timeout: REVIEW_BUDGET_MS, signal });
   const [summary, comments] = findings(response.choices[0]?.message.content ?? "");
   return [(summary + note).trim(), comments, commentable];
@@ -346,14 +385,16 @@ function fence(text: string): string {
   return "`".repeat(Math.max(3, longest + 1));
 }
 
-// reviewBody builds the review's body: the test result, a one-line summary, comments that had no diff line, the output.
-export function reviewBody(summary: string, unplaced: { path: string; line: number; body: string }[], testCmd: string, exitCode: number, tail: string): string {
+// reviewBody builds the review's body: the test result, a one-line summary, comments that had no diff line, the output,
+// and lastNote when this is the final review the pull request gets.
+export function reviewBody(summary: string, unplaced: { path: string; line: number; body: string }[], testCmd: string, exitCode: number, tail: string, lastNote = ""): string {
   const status = exitCode === 0 ? "Tests passed" : `Tests failed (exit ${exitCode})`;
   const parts = [REVIEW_MARKER, `**${status}** in an isolated NeevCloud sandbox: \`${testCmd}\``];
   if (summary) parts.push(quietMentions(summary));
   if (unplaced.length) parts.push(unplaced.map((c) => `- \`${c.path}:${c.line}\` ${c.body}`).join("\n"));
   const f = fence(tail);
   parts.push(`<details><summary>Test output</summary>\n\n${f}\n${tail.trim()}\n${f}\n</details>`);
+  if (lastNote) parts.push(`_${lastNote}_`);
   return parts.join("\n\n") + "\n";
 }
 
@@ -361,16 +402,24 @@ export interface RunOptions {
   repo: string; number: number; testCmd: string; registries: string[]; post: boolean;
   neev: NeevLike; modelClient: ModelLike; model: string; github: GitHub;
   log?: Log; signal?: AbortSignal; sleep?: (ms: number) => Promise<unknown>;
+  maxReviews?: number; // reviews per pull request, then tests only (default MAX_REVIEWS; 0: no limit)
 }
 
-// run reviews and tests one pull request in a fresh sandbox, posts or prints the comment, and always deletes the sandbox.
+// run reviews and tests one pull request in a fresh sandbox, posts or prints the review, and always deletes the sandbox.
+// A pull request gets at most maxReviews reviews; after that its pushes are only tested.
 export async function run(o: RunOptions): Promise<number> {
-  const { log = console.log, signal } = o;
+  const { log = console.log, signal, maxReviews = MAX_REVIEWS } = o;
   let sandbox: SandboxLike | undefined;
   try {
     log(`1. Reading ${o.repo}#${o.number} from GitHub...`);
     const pr = await o.github.pullRequest(o.number);
     log(`   "${pr.title}" (${pr.base.slice(0, 7)}...${pr.head.slice(0, 7)})`);
+    // Only a run that posts looks at earlier reviews; a dry run always reviews.
+    const history: History = o.post ? await o.github.history(o.number, pr.head) : { passes: 0, reviewedHead: false, prior: [] };
+    let skip = "";
+    if (history.reviewedHead) skip = `${pr.head.slice(0, 7)} already has this recipe's review`;
+    else if (maxReviews && history.passes >= maxReviews) skip = `the pull request has had its ${maxReviews} reviews`;
+    if (history.passes) log(`   ${history.passes} earlier review(s), ${history.prior.length} inline comment(s)`);
     log(`2. Creating a sandbox (egress allow-list: ${[GIT_HOST, ...o.registries].join(", ")})...`);
     sandbox = await o.neev.sandboxes.create({
       name: `pr-review-${randomBytes(4).toString("hex")}`, resources: SANDBOX_RESOURCES, lifecycle: SANDBOX_LIFECYCLE,
@@ -383,25 +432,33 @@ export async function run(o: RunOptions): Promise<number> {
     log(`   ${diff.split("\n").length - 1} diff lines${tokenNote}`);
     await closeGitAccess(sandbox);
     log(`   Removed ${GIT_HOST} from the allow-list: the pull request's code can reach only ${o.registries.join(", ") || "nothing"}`);
-    log(`4. Reviewing the diff with ${o.model}...`);
-    const started = Date.now();
-    const [summary, comments, commentable] = await reviewDiff(o.modelClient, o.model, pr.title, diff, signal);
-    const [placed, unplaced] = inlineComments(comments, commentable);
-    log(`   Review ready in ${Math.round((Date.now() - started) / 1000)}s: ${placed.length} inline comments` +
-      (unplaced.length ? `, ${unplaced.length} without a diff line` : ""));
+    let placed: InlineComment[] = [], unplaced: { path: string; line: number; body: string }[] = [], summary = "";
+    if (skip) {
+      log(`4. Not reviewing: ${skip}; the tests still run.`);
+    } else {
+      log(`4. Reviewing the diff with ${o.model}...`);
+      const started = Date.now();
+      const [s, comments, commentable] = await reviewDiff(o.modelClient, o.model, pr.title, diff, signal, history.prior);
+      summary = s;
+      [placed, unplaced] = inlineComments(comments, commentable);
+      log(`   Review ready in ${Math.round((Date.now() - started) / 1000)}s: ${placed.length} inline comments` +
+        (unplaced.length ? `, ${unplaced.length} without a diff line` : ""));
+    }
     log(`5. Running \`${o.testCmd}\` in the sandbox...`);
     const [exitCode, tail] = await runTests(sandbox, o.testCmd, log, signal);
     log(`   Tests ${exitCode === 0 ? "passed" : `failed (exit ${exitCode})`}`);
-    const body = reviewBody(summary, unplaced, o.testCmd, exitCode, tail);
-    if (!o.post) {
+    const passNumber = history.passes + 1;
+    const lastNote = maxReviews && passNumber === maxReviews ? `Review ${passNumber} of ${maxReviews}: later pushes are tested but not reviewed.` : "";
+    const body = reviewBody(summary, unplaced, o.testCmd, exitCode, tail, lastNote);
+    if (skip) {
+      log(`6. Not posting: ${skip}.`);
+    } else if (!o.post) {
       log("6. The review this run would post:\n");
       log(body);
       for (const c of placed) {
         const where = `${c.path}:${c.start_line ?? c.line}${c.start_line ? `-${c.line}` : ""}`;
         log(`   ${where}\n${c.body.split("\n").map((l) => `      ${l}`).join("\n")}`);
       }
-    } else if (await o.github.alreadyReviewed(o.number, pr.head)) {
-      log(`6. ${pr.head.slice(0, 7)} already has this recipe's review; not posting it again.`);
     } else {
       log(`6. Posted the review: ${await o.github.postReview(o.number, pr.head, body, placed)}`);
     }
@@ -432,10 +489,13 @@ export async function main(argv: string[], env: Record<string, string | undefine
       options: {
         repo: { type: "string" }, pr: { type: "string" }, "test-cmd": { type: "string", default: DEFAULT_TEST_CMD },
         allow: { type: "string", multiple: true }, "dry-run": { type: "boolean", default: false },
+        "max-reviews": { type: "string", default: String(MAX_REVIEWS) },
       },
     }));
   } catch (e) { console.error((e as Error).message); return 2; }
 
+  const maxReviews = Number(values["max-reviews"]);
+  if (!Number.isInteger(maxReviews) || maxReviews < 0) { console.error("--max-reviews is 0 (no limit) or more"); return 2; }
   let repo: string, number: number;
   const fromActions = prFromActions(env);
   if (values.repo || values.pr) {
@@ -465,7 +525,7 @@ export async function main(argv: string[], env: Record<string, string | undefine
     repo, number, testCmd: values["test-cmd"]!, registries: values.allow ?? DEFAULT_REGISTRIES, post,
     neev: new Neev() as unknown as NeevLike,
     modelClient: new OpenAI({ baseURL: MODEL_BASE_URL, apiKey: env.NEEV_MODEL_API_KEY, maxRetries: 0 }) as unknown as ModelLike,
-    model: env.MODEL ?? DEFAULT_MODEL, github: new GitHub(repo, token), signal: ac.signal,
+    model: env.MODEL ?? DEFAULT_MODEL, github: new GitHub(repo, token), signal: ac.signal, maxReviews,
   });
 }
 

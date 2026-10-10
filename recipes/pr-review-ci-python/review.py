@@ -40,6 +40,8 @@ REVIEW_MARKER = "<!-- neev-pr-review -->"  # finds this recipe's own reviews, so
 ACTIONS_BOT = "github-actions[bot]"         # who reviews when the token is a workflow's GITHUB_TOKEN
 MAX_COMMENTS = 6           # inline comments per review, most important first
 MAX_COMMENT_CHARS = 1_000  # per comment; a reviewer should take each in at a glance
+MAX_REVIEWS = 3            # reviews per pull request; later pushes are tested but not reviewed
+MAX_PRIOR_CHARS = 6_000    # earlier comments shown to the model so it does not raise them again
 
 REPO_RE = re.compile(r"^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$")
 SHA_RE = re.compile(r"^[0-9a-f]{40}$")
@@ -126,20 +128,36 @@ class GitHub:
         except ReviewError:
             return ACTIONS_BOT
 
-    def already_reviewed(self, number: int, head: str) -> bool:
-        """True if this recipe already reviewed this commit, so a re-run of the job does not post twice.
-
-        A review counts as ours only if we wrote it, so quoting the marker cannot suppress a review."""
-        author = self.author()
-        page = 1
+    def _pages(self, path: str) -> list[dict]:
+        """Returns every item of a paged list endpoint."""
+        items, page = [], 1
         while True:
-            reviews = self._request("GET", f"/repos/{self.repo}/pulls/{number}/reviews?per_page=100&page={page}")
-            if any(r.get("commit_id") == head and REVIEW_MARKER in (r.get("body") or "")
-                   and (r.get("user") or {}).get("login") == author for r in reviews):
-                return True
-            if len(reviews) < 100:
-                return False
+            batch = self._request("GET", f"{path}?per_page=100&page={page}")
+            items += batch
+            if len(batch) < 100:
+                return items
             page += 1
+
+    def history(self, number: int, head: str) -> dict:
+        """Returns this recipe's earlier reviews of the pull request: how many there were, whether one is of
+        this head commit, and their inline comments with the replies they got.
+
+        A review counts as ours only if we wrote it, so quoting the marker cannot suppress or fake one."""
+        author = self.author()
+        ours = [r for r in self._pages(f"/repos/{self.repo}/pulls/{number}/reviews")
+                if REVIEW_MARKER in (r.get("body") or "") and (r.get("user") or {}).get("login") == author]
+        prior = []
+        if ours:
+            ids = {r.get("id") for r in ours}
+            comments = self._pages(f"/repos/{self.repo}/pulls/{number}/comments")
+            replies = {}
+            for c in comments:
+                if c.get("in_reply_to_id"):
+                    replies.setdefault(c["in_reply_to_id"], []).append((c.get("body") or "")[:300])
+            prior = [{"path": c.get("path"), "line": c.get("line") or c.get("original_line"),
+                      "body": (c.get("body") or "")[:300], "replies": replies.get(c.get("id"), [])}
+                     for c in comments if c.get("pull_request_review_id") in ids and not c.get("in_reply_to_id")]
+        return {"passes": len(ours), "reviewed_head": any(r.get("commit_id") == head for r in ours), "prior": prior}
 
     def post_review(self, number: int, head: str, body: str, comments: list[dict]) -> str:
         """Posts a review on the head commit with inline comments; returns the review's URL.
@@ -247,8 +265,23 @@ def _findings(text: str) -> tuple[str, list[dict]]:
     return str(data.get("summary") or "")[:MAX_COMMENT_CHARS], comments[:MAX_COMMENTS]
 
 
-def review_diff(model_client, model: str, title: str, diff: str) -> tuple[str, list[dict], dict]:
-    """Asks the model for a review of the numbered diff; returns (summary, comments, commentable lines)."""
+def prior_note(prior: list[dict]) -> str:
+    """Lists earlier comments and their replies for the model, so a later review does not raise them again."""
+    if not prior:
+        return ""
+    lines = []
+    for c in prior:
+        lines.append(f"- {c['path']}:{c['line']} {' '.join(c['body'].split())}")
+        lines += [f"  reply: {' '.join(r.split())}" for r in c["replies"]]
+    text = "\n".join(lines)[:MAX_PRIOR_CHARS]
+    return ("\n\nAlready raised in earlier reviews of this pull request, with the author's replies. Do not raise "
+            f"these again, even reworded or on another line:\n{text}")
+
+
+def review_diff(model_client, model: str, title: str, diff: str, prior: list[dict] = ()) -> tuple[str, list[dict], dict]:
+    """Asks the model for a review of the numbered diff; returns (summary, comments, commentable lines).
+
+    prior holds earlier comments on the pull request, which the model is told not to raise again."""
     numbered, commentable = number_diff(diff)
     if not commentable:
         return "The pull request has no changes to review.", [], commentable
@@ -259,7 +292,8 @@ def review_diff(model_client, model: str, title: str, diff: str) -> tuple[str, l
     response = model_client.chat.completions.create(
         model=model, timeout=REVIEW_BUDGET_S,
         messages=[{"role": "system", "content": REVIEW_PROMPT},
-                  {"role": "user", "content": f"Pull request title: {title}\n\n<diff>\n{numbered}\n</diff>"}])
+                  {"role": "user", "content": f"Pull request title: {title}{prior_note(list(prior))}"
+                                              f"\n\n<diff>\n{numbered}\n</diff>"}])
     summary, comments = _findings(response.choices[0].message.content or "")
     return (summary + summary_note).strip(), comments, commentable
 
@@ -330,8 +364,9 @@ def _fence(text: str) -> str:
     return "`" * max(3, longest + 1)
 
 
-def review_body(summary: str, unplaced: list[dict], test_cmd: str, exit_code: int, tail: str) -> str:
-    """Builds the review's body: the test result, a one-line summary, comments that had no diff line, the output."""
+def review_body(summary: str, unplaced: list[dict], test_cmd: str, exit_code: int, tail: str, last_note: str = "") -> str:
+    """Builds the review's body: the test result, a one-line summary, comments that had no diff line, the output,
+    and last_note when this is the final review the pull request gets."""
     status = "Tests passed" if exit_code == 0 else f"Tests failed (exit {exit_code})"
     parts = [REVIEW_MARKER, f"**{status}** in an isolated NeevCloud sandbox: `{test_cmd}`"]
     if summary:
@@ -340,17 +375,30 @@ def review_body(summary: str, unplaced: list[dict], test_cmd: str, exit_code: in
         parts.append("\n".join(f"- `{c['path']}:{c['line']}` {c['body']}" for c in unplaced))
     fence = _fence(tail)
     parts.append(f"<details><summary>Test output</summary>\n\n{fence}\n{tail.strip()}\n{fence}\n</details>")
+    if last_note:
+        parts.append(f"_{last_note}_")
     return "\n\n".join(parts) + "\n"
 
 
 def run(repo: str, number: int, test_cmd: str, registries: list[str], post: bool, client, model_client,
-        model: str, github: GitHub, log: Log = print) -> int:
-    """Reviews and tests one pull request in a fresh sandbox, posts or prints the comment, always deletes it."""
+        model: str, github: GitHub, log: Log = print, max_reviews: int = MAX_REVIEWS) -> int:
+    """Reviews and tests one pull request in a fresh sandbox, posts or prints the review, always deletes it.
+
+    A pull request gets at most max_reviews reviews (0: no limit); after that its pushes are only tested."""
     sandbox = None
     try:
         log(f"1. Reading {repo}#{number} from GitHub...")
         pr = github.pull_request(number)
         log(f"   \"{pr['title']}\" ({pr['base'][:7]}...{pr['head'][:7]})")
+        # Only a run that posts looks at earlier reviews; a dry run always reviews.
+        history = github.history(number, pr["head"]) if post else {"passes": 0, "reviewed_head": False, "prior": []}
+        skip = ""
+        if history["reviewed_head"]:
+            skip = f"{pr['head'][:7]} already has this recipe's review"
+        elif max_reviews and history["passes"] >= max_reviews:
+            skip = f"the pull request has had its {max_reviews} reviews"
+        if history["passes"]:
+            log(f"   {history['passes']} earlier review(s), {len(history['prior'])} inline comment(s)")
         log(f"2. Creating a sandbox (egress allow-list: {', '.join([GIT_HOST, *registries])})...")
         sandbox = client.sandboxes.create({"name": f"pr-review-{secrets.token_hex(4)}",
                                            "resources": SANDBOX_RESOURCES, "lifecycle": SANDBOX_LIFECYCLE},
@@ -363,24 +411,31 @@ def run(repo: str, number: int, test_cmd: str, registries: list[str], post: bool
         close_git_access(sandbox)
         log(f"   Removed {GIT_HOST} from the allow-list: the pull request's code can reach only "
             f"{', '.join(registries) or 'nothing'}")
-        log(f"4. Reviewing the diff with {model}...")
-        started = time.monotonic()
-        summary, comments, commentable = review_diff(model_client, model, pr["title"], diff)
-        placed, unplaced = inline_comments(comments, commentable)
-        log(f"   Review ready in {time.monotonic() - started:.0f}s: {len(placed)} inline comments"
-            + (f", {len(unplaced)} without a diff line" if unplaced else ""))
+        placed, unplaced, summary = [], [], ""
+        if skip:
+            log(f"4. Not reviewing: {skip}; the tests still run.")
+        else:
+            log(f"4. Reviewing the diff with {model}...")
+            started = time.monotonic()
+            summary, comments, commentable = review_diff(model_client, model, pr["title"], diff, history["prior"])
+            placed, unplaced = inline_comments(comments, commentable)
+            log(f"   Review ready in {time.monotonic() - started:.0f}s: {len(placed)} inline comments"
+                + (f", {len(unplaced)} without a diff line" if unplaced else ""))
         log(f"5. Running `{test_cmd}` in the sandbox...")
         exit_code, tail = run_tests(sandbox, test_cmd, log)
         log(f"   Tests {'passed' if exit_code == 0 else f'failed (exit {exit_code})'}")
-        body = review_body(summary, unplaced, test_cmd, exit_code, tail)
-        if not post:
+        pass_number = history["passes"] + 1
+        last_note = (f"Review {pass_number} of {max_reviews}: later pushes are tested but not reviewed."
+                     if max_reviews and pass_number == max_reviews else "")
+        body = review_body(summary, unplaced, test_cmd, exit_code, tail, last_note)
+        if skip:
+            log(f"6. Not posting: {skip}.")
+        elif not post:
             log("6. The review this run would post:\n")
             log(body)
             for c in placed:
                 where = f"{c['path']}:{c.get('start_line', c['line'])}" + (f"-{c['line']}" if "start_line" in c else "")
                 log(f"   {where}\n" + "\n".join(f"      {line}" for line in c["body"].split("\n")))
-        elif github.already_reviewed(number, pr["head"]):
-            log(f"6. {pr['head'][:7]} already has this recipe's review; not posting it again.")
         else:
             log(f"6. Posted the review: {github.post_review(number, pr['head'], body, placed)}")
         return 0 if exit_code == 0 else 1
@@ -407,7 +462,11 @@ def main(argv=None) -> int:
     parser.add_argument("--allow", action="append", metavar="HOST",
                         help="a host the tests may reach, repeatable (default: registry.npmjs.org)")
     parser.add_argument("--dry-run", action="store_true", help="print the review instead of posting it")
+    parser.add_argument("--max-reviews", type=int, default=MAX_REVIEWS,
+                        help=f"reviews per pull request, then tests only (default: {MAX_REVIEWS}; 0: no limit)")
     args = parser.parse_args(argv)
+    if args.max_reviews < 0:
+        parser.error("--max-reviews is 0 (no limit) or more")
 
     from_actions = pr_from_actions(os.environ)
     if args.repo or args.pr:
@@ -437,7 +496,7 @@ def main(argv=None) -> int:
     model_client = OpenAI(base_url=MODEL_BASE_URL, api_key=os.environ["NEEV_MODEL_API_KEY"], max_retries=0)
     with NeevAI() as client:
         return run(repo, number, args.test_cmd, args.allow or DEFAULT_REGISTRIES, post, client, model_client,
-                   os.environ.get("MODEL", DEFAULT_MODEL), GitHub(repo, token))
+                   os.environ.get("MODEL", DEFAULT_MODEL), GitHub(repo, token), max_reviews=args.max_reviews)
 
 
 if __name__ == "__main__":
