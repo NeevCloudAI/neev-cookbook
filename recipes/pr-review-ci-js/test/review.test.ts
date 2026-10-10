@@ -5,24 +5,35 @@ import { join } from "node:path";
 import { describe, it } from "node:test";
 import {
   GitHub, MAX_COMMENTS, MAX_DIFF_CHARS, REPO_DIR, REVIEW_MARKER, fetchPullRequest, gitAuthEnv, inlineComments, main, missingEnv,
-  numberDiff, prFromActions, reviewBody, reviewDiff, run, runTests, waitForHost,
+  numberDiff, prFromActions, priorNote, reviewBody, reviewDiff, run, runTests, waitForHost,
 } from "../review.ts";
 import { BASE, DIFF, HEAD, fakeGitHub, fakeModel, fakeNeev, fakeSandbox, type FakeSandbox } from "./fakes.ts";
 
 const PR = { title: "Add discounts", base: BASE, head: HEAD };
 const FULL_ENV = { NEEV_API_KEY: "k", NEEV_ORG_ID: "o", NEEV_PROJECT_ID: "p", NEEV_MODEL_API_KEY: "m" };
 const REVIEWS = "/repos/o/r/pulls/7/reviews";
+const REVIEW_PAGE = `${REVIEWS}?per_page=100&page=1`;
+const COMMENT_PAGE = "/repos/o/r/pulls/7/comments?per_page=100&page=1";
+const BOT = { login: "github-actions[bot]" };
+
+// history returns GitHub routes for a pull request the Actions bot already reviewed on the given commits.
+function history(...commits: string[]): Record<string, unknown> {
+  return {
+    [`GET ${REVIEW_PAGE}`]: commits.map((commit_id, i) => ({ id: i + 1, commit_id, body: REVIEW_MARKER, user: BOT })),
+    [`GET ${COMMENT_PAGE}`]: [], [`POST ${REVIEWS}`]: { html_url: "u" },
+  };
+}
 const noSleep = async () => {};
 
 // runWith runs the recipe against fakes and returns the exit code with everything the fakes recorded.
-async function runWith(o: { sandbox?: FakeSandbox; createError?: Error; model?: ReturnType<typeof fakeModel>; routes?: Record<string, unknown>; post?: boolean; signal?: AbortSignal } = {}) {
+async function runWith(o: { sandbox?: FakeSandbox; createError?: Error; model?: ReturnType<typeof fakeModel>; routes?: Record<string, unknown>; post?: boolean; signal?: AbortSignal; maxReviews?: number } = {}) {
   const { neev, created, sandbox } = fakeNeev(o.sandbox ?? fakeSandbox(), o.createError);
   const gh = fakeGitHub(o.routes);
   const lines: string[] = [];
   const code = await run({
     repo: "o/r", number: 7, testCmd: "npm test", registries: ["registry.npmjs.org"], post: o.post ?? false,
     neev, modelClient: (o.model ?? fakeModel()).model, model: "glm-4-7", github: new GitHub("o/r", "ghs_token", gh.fetchFn),
-    log: (s) => lines.push(s), signal: o.signal, sleep: noSleep,
+    log: (s) => lines.push(s), signal: o.signal, sleep: noSleep, maxReviews: o.maxReviews,
   });
   return { code, created, sandbox, gh, lines };
 }
@@ -232,22 +243,47 @@ describe("GitHub", () => {
     assert.deepEqual([sent.at(-1).comments, sent.at(-1).body], [[], "body\n\n- `a.js:3` b"]);
   });
 
-  it("success: alreadyReviewed matches our review of this commit only", async () => {
-    const page: unknown[] = [{ commit_id: HEAD, body: `${REVIEW_MARKER} quoted`, user: { login: "attacker" } },
-      { commit_id: BASE, body: REVIEW_MARKER, user: { login: "github-actions[bot]" } }];
-    const gh = fakeGitHub({ [`GET ${REVIEWS}?per_page=100&page=1`]: page });
-    assert.equal(await new GitHub("o/r", "t", gh.fetchFn).alreadyReviewed(7, HEAD), false);
-    page.push({ commit_id: HEAD, body: REVIEW_MARKER, user: { login: "github-actions[bot]" } });
-    assert.equal(await new GitHub("o/r", "t", gh.fetchFn).alreadyReviewed(7, HEAD), true);
+  it("success: history counts only our reviews and collects their comments", async () => {
+    const gh = fakeGitHub({
+      [`GET ${REVIEW_PAGE}`]: [
+        { id: 1, commit_id: BASE, body: REVIEW_MARKER, user: BOT },
+        { id: 2, commit_id: HEAD, body: `${REVIEW_MARKER} quoted`, user: { login: "attacker" } },
+        { id: 3, commit_id: BASE, body: "lgtm", user: BOT }],
+      [`GET ${COMMENT_PAGE}`]: [
+        { id: 10, pull_request_review_id: 1, path: "a.js", line: 4, body: "NaN here." },
+        { id: 11, pull_request_review_id: 1, in_reply_to_id: 10, body: "Not reachable." },
+        { id: 12, pull_request_review_id: 2, path: "b.js", line: 1, body: "someone else's" }],
+    });
+    assert.deepEqual(await new GitHub("o/r", "t", gh.fetchFn).history(7, HEAD), {
+      passes: 1, reviewedHead: false, prior: [{ path: "a.js", line: 4, body: "NaN here.", replies: ["Not reachable."] }] });
   });
 
-  it("success: alreadyReviewed pages and uses the token's login", async () => {
+  it("success: history pages and uses the token's login", async () => {
     const gh = fakeGitHub({
       "GET /user": { login: "maintainer" },
-      [`GET ${REVIEWS}?per_page=100&page=1`]: Array(100).fill({ commit_id: BASE, body: "x" }),
-      [`GET ${REVIEWS}?per_page=100&page=2`]: [{ commit_id: HEAD, body: REVIEW_MARKER, user: { login: "maintainer" } }],
+      [`GET ${REVIEW_PAGE}`]: Array(100).fill({ id: 0, commit_id: BASE, body: "x" }),
+      [`GET ${REVIEWS}?per_page=100&page=2`]: [{ id: 5, commit_id: HEAD, body: REVIEW_MARKER, user: { login: "maintainer" } }],
+      [`GET ${COMMENT_PAGE}`]: [],
     });
-    assert.equal(await new GitHub("o/r", "t", gh.fetchFn).alreadyReviewed(7, HEAD), true);
+    assert.deepEqual(await new GitHub("o/r", "t", gh.fetchFn).history(7, HEAD), { passes: 1, reviewedHead: true, prior: [] });
+  });
+
+  it("success: history without reviews skips the comments", async () => {
+    const gh = fakeGitHub({ [`GET ${REVIEW_PAGE}`]: [] });
+    assert.deepEqual(await new GitHub("o/r", "t", gh.fetchFn).history(7, HEAD), { passes: 0, reviewedHead: false, prior: [] });
+    assert.ok(!gh.requests.some((r) => r.path === COMMENT_PAGE));
+  });
+
+  it("success: priorNote tells the model not to repeat", () => {
+    const note = priorNote([{ path: "a.js", line: 4, body: "NaN\nhere.", replies: ["Not reachable."] }]);
+    assert.ok(note.includes("Do not raise these again") && note.includes("- a.js:4 NaN here.\n  reply: Not reachable."));
+    assert.equal(priorNote([]), "");
+  });
+
+  it("success: review sends earlier comments to the model", async () => {
+    const { model, calls } = fakeModel();
+    await reviewDiff(model, "m", "t", DIFF, undefined, [{ path: "a.js", line: 4, body: "NaN here.", replies: [] }]);
+    assert.ok(calls[0].messages[1].content.includes("- a.js:4 NaN here."));
   });
 });
 
@@ -275,7 +311,7 @@ describe("the whole run", () => {
   it("success: posts a review when asked", async () => {
     const { code, gh, lines } = await runWith({
       post: true,
-      routes: { [`GET ${REVIEWS}?per_page=100&page=1`]: [], [`POST ${REVIEWS}`]: { html_url: "https://github.com/o/r/pull/7#r1" } },
+      routes: { [`GET ${REVIEW_PAGE}`]: [], [`POST ${REVIEWS}`]: { html_url: "https://github.com/o/r/pull/7#r1" } },
     });
     assert.equal(code, 0);
     assert.ok(lines.includes("6. Posted the review: https://github.com/o/r/pull/7#r1"));
@@ -284,14 +320,41 @@ describe("the whole run", () => {
     assert.equal(sent.comments[0].path, "cart.js");
   });
 
-  it("success: does not post twice for one commit", async () => {
-    const { code, gh, lines } = await runWith({
-      post: true,
-      routes: { [`GET ${REVIEWS}?per_page=100&page=1`]: [{ commit_id: HEAD, body: REVIEW_MARKER, user: { login: "github-actions[bot]" } }] },
-    });
+  it("success: does not review one commit twice", async () => {
+    const model = fakeModel();
+    const { code, gh, lines } = await runWith({ post: true, model, routes: history(HEAD) });
     assert.equal(code, 0);
-    assert.ok(lines.includes("6. bbbbbbb already has this recipe's review; not posting it again."));
+    assert.equal(model.calls.length, 0);
+    assert.ok(lines.includes("4. Not reviewing: bbbbbbb already has this recipe's review; the tests still run."));
     assert.ok(!gh.requests.some((r) => r.method === "POST"));
+  });
+
+  it("success: stops reviewing at the ceiling but still tests", async () => {
+    const model = fakeModel();
+    const sandbox = fakeSandbox({ testEvents: [{ type: "exit", exitCode: 1 }] });
+    const { code, lines } = await runWith({ post: true, model, sandbox, routes: history(BASE, BASE, BASE) });
+    assert.equal(code, 1);
+    assert.equal(model.calls.length, 0);
+    assert.equal(sandbox.streams.length, 1);
+    assert.ok(lines.includes("6. Not posting: the pull request has had its 3 reviews."));
+  });
+
+  it("success: the last review says it is the last", async () => {
+    const model = fakeModel();
+    const routes = history(BASE, BASE);
+    routes[`GET ${COMMENT_PAGE}`] = [{ id: 9, pull_request_review_id: 1, path: "cart.js", line: 7, body: "Old point." }];
+    const { code, gh, lines } = await runWith({ post: true, model, routes });
+    assert.equal(code, 0);
+    assert.ok(gh.requests.at(-1)!.body.body.includes("_Review 3 of 3: later pushes are tested but not reviewed._"));
+    assert.ok(model.calls[0].messages[1].content.includes("- cart.js:7 Old point."));
+    assert.ok(lines.includes("   2 earlier review(s), 1 inline comment(s)"));
+  });
+
+  it("success: no limit keeps reviewing", async () => {
+    const { code, gh } = await runWith({ post: true, maxReviews: 0, routes: history(BASE, BASE, BASE, BASE, BASE) });
+    assert.equal(code, 0);
+    assert.equal(gh.requests.at(-1)!.method, "POST");
+    assert.ok(!gh.requests.at(-1)!.body.body.includes("Review 6 of"));
   });
 
   it("failure: failing tests fail the run but still review", async () => {
@@ -353,5 +416,9 @@ describe("main", () => {
 
   it("failure: wants --repo and --pr together", async () => {
     assert.equal(await main(["--repo", "o/r"], FULL_ENV), 2);
+  });
+
+  it("failure: rejects a negative review ceiling", async () => {
+    assert.equal(await main(["--max-reviews", "-1"], FULL_ENV), 2);
   });
 });

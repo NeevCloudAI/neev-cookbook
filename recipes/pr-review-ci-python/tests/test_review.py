@@ -6,7 +6,7 @@ import pytest
 import review
 from review import (
     REVIEW_MARKER, GitHub, ReviewError, fetch_pull_request, git_auth_env, inline_comments, missing_env,
-    number_diff, pr_from_actions, review_body, review_diff, run, run_tests, wait_for_host,
+    number_diff, pr_from_actions, prior_note, review_body, review_diff, run, run_tests, wait_for_host,
 )
 from tests.fakes import BASE, DIFF, HEAD, FakeClient, FakeGitHubAPI, FakeModel, FakeSandbox
 
@@ -14,13 +14,13 @@ PR = {"title": "Add discounts", "base": BASE, "head": HEAD}
 FULL_ENV = {"NEEV_API_KEY": "k", "NEEV_ORG_ID": "o", "NEEV_PROJECT_ID": "p", "NEEV_MODEL_API_KEY": "m"}
 
 
-def _run(sandbox=None, client=None, model=None, api=None, post=False, test_cmd="npm test", lines=None):
+def _run(sandbox=None, client=None, model=None, api=None, post=False, test_cmd="npm test", lines=None, max_reviews=3):
     """Runs the recipe against fakes and returns (exit code, client, api, printed lines)."""
     client = client or FakeClient(sandbox or FakeSandbox())
     api = api or FakeGitHubAPI()
     lines = [] if lines is None else lines
     code = run("o/r", 7, test_cmd, ["registry.npmjs.org"], post, client, model or FakeModel(), "glm-4-7",
-               GitHub("o/r", "ghs_token", urlopen=api), log=lines.append)
+               GitHub("o/r", "ghs_token", urlopen=api), log=lines.append, max_reviews=max_reviews)
     return code, client, api, lines
 
 
@@ -262,24 +262,54 @@ def test_failure_post_review_folds_comments_into_the_body_when_github_refuses_a_
     assert api.requests[-1][2]["comments"] == [] and api.requests[-1][2]["body"] == "body\n\n- `a.js:3` b"
 
 
-def test_success_already_reviewed_matches_our_review_of_this_commit_only():
-    api = FakeGitHubAPI({("GET", f"{REVIEWS}?per_page=100&page=1"): [
-        {"commit_id": HEAD, "body": f"{REVIEW_MARKER} quoted", "user": {"login": "attacker"}},
-        {"commit_id": BASE, "body": REVIEW_MARKER, "user": {"login": "github-actions[bot]"}}]})
-    assert not GitHub("o/r", "t", urlopen=api).already_reviewed(7, HEAD)
-    api.routes[("GET", f"{REVIEWS}?per_page=100&page=1")].append(
-        {"commit_id": HEAD, "body": REVIEW_MARKER, "user": {"login": "github-actions[bot]"}})
-    assert GitHub("o/r", "t", urlopen=api).already_reviewed(7, HEAD)
+BOT = {"login": "github-actions[bot]"}
+REVIEW_PAGE = f"{REVIEWS}?per_page=100&page=1"
+COMMENT_PAGE = "/repos/o/r/pulls/7/comments?per_page=100&page=1"
 
 
-def test_success_already_reviewed_pages_and_uses_the_tokens_login():
+def test_success_history_counts_only_our_reviews_and_collects_their_comments():
+    api = FakeGitHubAPI({
+        ("GET", REVIEW_PAGE): [
+            {"id": 1, "commit_id": BASE, "body": REVIEW_MARKER, "user": BOT},
+            {"id": 2, "commit_id": HEAD, "body": f"{REVIEW_MARKER} quoted", "user": {"login": "attacker"}},
+            {"id": 3, "commit_id": BASE, "body": "lgtm", "user": BOT}],
+        ("GET", COMMENT_PAGE): [
+            {"id": 10, "pull_request_review_id": 1, "path": "a.js", "line": 4, "body": "NaN here."},
+            {"id": 11, "pull_request_review_id": 1, "in_reply_to_id": 10, "body": "Not reachable."},
+            {"id": 12, "pull_request_review_id": 2, "path": "b.js", "line": 1, "body": "someone else's"}],
+    })
+    assert GitHub("o/r", "t", urlopen=api).history(7, HEAD) == {
+        "passes": 1, "reviewed_head": False,
+        "prior": [{"path": "a.js", "line": 4, "body": "NaN here.", "replies": ["Not reachable."]}]}
+
+
+def test_success_history_pages_and_uses_the_tokens_login():
     api = FakeGitHubAPI({
         ("GET", "/user"): {"login": "maintainer"},
-        ("GET", f"{REVIEWS}?per_page=100&page=1"): [{"commit_id": BASE, "body": "x"}] * 100,
-        ("GET", f"{REVIEWS}?per_page=100&page=2"): [{"commit_id": HEAD, "body": REVIEW_MARKER,
+        ("GET", REVIEW_PAGE): [{"id": 0, "commit_id": BASE, "body": "x"}] * 100,
+        ("GET", f"{REVIEWS}?per_page=100&page=2"): [{"id": 5, "commit_id": HEAD, "body": REVIEW_MARKER,
                                                      "user": {"login": "maintainer"}}],
+        ("GET", COMMENT_PAGE): [],
     })
-    assert GitHub("o/r", "t", urlopen=api).already_reviewed(7, HEAD)
+    assert GitHub("o/r", "t", urlopen=api).history(7, HEAD) == {"passes": 1, "reviewed_head": True, "prior": []}
+
+
+def test_success_history_without_reviews_skips_the_comments():
+    api = FakeGitHubAPI({("GET", REVIEW_PAGE): []})
+    assert GitHub("o/r", "t", urlopen=api).history(7, HEAD) == {"passes": 0, "reviewed_head": False, "prior": []}
+    assert ("GET", COMMENT_PAGE) not in [(r[0], r[1]) for r in api.requests]
+
+
+def test_success_prior_note_tells_the_model_not_to_repeat():
+    note = prior_note([{"path": "a.js", "line": 4, "body": "NaN\nhere.", "replies": ["Not reachable."]}])
+    assert "Do not raise these again" in note and "- a.js:4 NaN here.\n  reply: Not reachable." in note
+    assert prior_note([]) == ""
+
+
+def test_success_review_sends_earlier_comments_to_the_model():
+    model = FakeModel()
+    review_diff(model, "m", "t", DIFF, [{"path": "a.js", "line": 4, "body": "NaN here.", "replies": []}])
+    assert "- a.js:4 NaN here." in model.calls[0]["messages"][1]["content"]
 
 
 # --- the whole run -----------------------------------------------------------------------------
@@ -310,8 +340,7 @@ def test_success_github_access_is_removed_before_the_tests_run():
 
 
 def test_success_run_posts_a_review_when_asked():
-    api = FakeGitHubAPI({("GET", f"{REVIEWS}?per_page=100&page=1"): [],
-                         ("POST", REVIEWS): {"html_url": "https://github.com/o/r/pull/7#r1"}})
+    api = FakeGitHubAPI({("GET", REVIEW_PAGE): [], ("POST", REVIEWS): {"html_url": "https://github.com/o/r/pull/7#r1"}})
     code, _, _, lines = _run(api=api, post=True)
     assert code == 0
     assert "6. Posted the review: https://github.com/o/r/pull/7#r1" in lines
@@ -319,13 +348,46 @@ def test_success_run_posts_a_review_when_asked():
     assert sent["body"].startswith(REVIEW_MARKER) and sent["comments"][0]["path"] == "cart.js"
 
 
-def test_success_run_does_not_post_twice_for_one_commit():
-    api = FakeGitHubAPI({("GET", f"{REVIEWS}?per_page=100&page=1"): [
-        {"commit_id": HEAD, "body": REVIEW_MARKER, "user": {"login": "github-actions[bot]"}}]})
-    code, _, _, lines = _run(api=api, post=True)
-    assert code == 0
-    assert "6. bbbbbbb already has this recipe's review; not posting it again." in lines
+def _history(*reviews, comments=()):
+    """GitHub routes for a pull request with the given reviews by the Actions bot and inline comments."""
+    return {("GET", REVIEW_PAGE): [{"id": i, "commit_id": c, "body": REVIEW_MARKER, "user": BOT}
+                                   for i, c in enumerate(reviews, 1)],
+            ("GET", COMMENT_PAGE): list(comments), ("POST", REVIEWS): {"html_url": "u"}}
+
+
+def test_success_run_does_not_review_one_commit_twice():
+    api = FakeGitHubAPI(_history(HEAD))
+    model = FakeModel()
+    code, _, _, lines = _run(api=api, post=True, model=model)
+    assert code == 0 and model.calls == []
+    assert "4. Not reviewing: bbbbbbb already has this recipe's review; the tests still run." in lines
     assert "POST" not in [r[0] for r in api.requests]
+
+
+def test_success_run_stops_reviewing_at_the_ceiling_but_still_tests():
+    api = FakeGitHubAPI(_history(BASE, BASE, BASE))
+    model = FakeModel()
+    sandbox = FakeSandbox(test_events=[{"type": "exit", "exit_code": 1}])
+    code, _, _, lines = _run(api=api, post=True, model=model, sandbox=sandbox)
+    assert code == 1 and model.calls == [] and sandbox.stream_calls
+    assert "6. Not posting: the pull request has had its 3 reviews." in lines
+
+
+def test_success_last_review_says_it_is_the_last():
+    api = FakeGitHubAPI(_history(BASE, BASE, comments=[
+        {"id": 9, "pull_request_review_id": 1, "path": "cart.js", "line": 7, "body": "Old point."}]))
+    model = FakeModel()
+    code, _, _, lines = _run(api=api, post=True, model=model)
+    assert code == 0
+    assert "_Review 3 of 3: later pushes are tested but not reviewed._" in api.requests[-1][2]["body"]
+    assert "- cart.js:7 Old point." in model.calls[0]["messages"][1]["content"]
+    assert "   2 earlier review(s), 1 inline comment(s)" in lines
+
+
+def test_success_no_limit_keeps_reviewing():
+    api = FakeGitHubAPI(_history(*[BASE] * 5))
+    code, _, _, _ = _run(api=api, post=True, max_reviews=0)
+    assert code == 0 and api.requests[-1][0] == "POST" and "Review 6 of" not in api.requests[-1][2]["body"]
 
 
 def test_failure_failing_tests_fail_the_run_but_still_review():
@@ -401,4 +463,11 @@ def test_failure_main_wants_repo_and_pr_together(monkeypatch):
     _clear(monkeypatch)
     with pytest.raises(SystemExit) as exc:
         review.main(["--repo", "o/r"])
+    assert exc.value.code == 2
+
+
+def test_failure_main_rejects_a_negative_review_ceiling(monkeypatch):
+    _clear(monkeypatch)
+    with pytest.raises(SystemExit) as exc:
+        review.main(["--max-reviews", "-1"])
     assert exc.value.code == 2
