@@ -4,13 +4,14 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, it } from "node:test";
 import {
-  COMMENT_MARKER, GitHub, MAX_DIFF_CHARS, MAX_REVIEW_CHARS, REPO_DIR, commentBody, fetchPullRequest, gitAuthEnv, main, missingEnv,
-  prFromActions, reviewDiff, run, runTests, waitForHost,
+  GitHub, MAX_COMMENTS, MAX_DIFF_CHARS, REPO_DIR, REVIEW_MARKER, fetchPullRequest, gitAuthEnv, inlineComments, main, missingEnv,
+  numberDiff, prFromActions, reviewBody, reviewDiff, run, runTests, waitForHost,
 } from "../review.ts";
-import { BASE, HEAD, fakeGitHub, fakeModel, fakeNeev, fakeSandbox, type FakeSandbox } from "./fakes.ts";
+import { BASE, DIFF, HEAD, fakeGitHub, fakeModel, fakeNeev, fakeSandbox, type FakeSandbox } from "./fakes.ts";
 
 const PR = { title: "Add discounts", base: BASE, head: HEAD };
 const FULL_ENV = { NEEV_API_KEY: "k", NEEV_ORG_ID: "o", NEEV_PROJECT_ID: "p", NEEV_MODEL_API_KEY: "m" };
+const REVIEWS = "/repos/o/r/pulls/7/reviews";
 const noSleep = async () => {};
 
 // runWith runs the recipe against fakes and returns the exit code with everything the fakes recorded.
@@ -83,28 +84,56 @@ describe("fetching into the sandbox", () => {
 });
 
 describe("review and tests", () => {
-  it("success: review sends the diff and strips reasoning", async () => {
-    const { model, calls } = fakeModel("<think>hmm</think>- looks fine");
-    assert.equal(await reviewDiff(model, "glm-4-7", "Add discounts", "+x\n"), "- looks fine");
-    assert.match(calls[0].messages[1].content, /Add discounts[\s\S]*<diff>\n\+x\n\n<\/diff>/);
+  it("success: numberDiff numbers new lines and maps hunks", () => {
+    const [numbered, lines] = numberDiff(DIFF);
+    assert.match(numbered, /^    6 \+export function applyDiscount\(total, code\) \{$/m);
+    assert.deepEqual([...lines["cart.js"]], [[5, [1, "}"]], [6, [1, "export function applyDiscount(total, code) {"]],
+      [7, [1, "  return total - Number(code.slice(4));"]], [8, [1, "}"]]]);
+  });
+
+  it("success: numberDiff reads plus lines in a hunk as content, and skips deleted files", () => {
+    const [numbered, lines] = numberDiff("diff --git a/x b/x\n--- a/x\n+++ b/x\n@@ -0,0 +1,2 @@\n++++ not a header\n+y\n" +
+      "diff --git a/g b/g\ndeleted file mode 100644\n--- a/g\n+++ /dev/null\n@@ -1 +0,0 @@\n-gone\n");
+    assert.deepEqual(Object.keys(lines), ["x"]);
+    assert.deepEqual([...lines.x.keys()], [1, 2]);
+    assert.ok(numbered.includes("    1 ++++ not a header") && numbered.includes("      -gone"));
+  });
+
+  it("success: review sends the numbered diff and reads JSON", async () => {
+    const { model, calls } = fakeModel();
+    const [summary, comments, lines] = await reviewDiff(model, "glm-4-7", "Add discounts", DIFF);
+    assert.equal(summary, "Adds discount codes.");
+    assert.equal(comments[0].line, 7);
+    assert.ok(lines["cart.js"].has(7));
+    assert.match(calls[0].messages[1].content, /Add discounts[\s\S]*    7 \+  return total/);
     assert.match(calls[0].messages[0].content, /untrusted/);
   });
 
-  it("success: review cuts a large diff and says so", async () => {
-    const { model, calls } = fakeModel("- ok");
-    const text = await reviewDiff(model, "m", "t", "+".repeat(MAX_DIFF_CHARS + 10));
-    assert.match(text, /characters of the diff were reviewed\._$/);
-    assert.ok(calls[0].messages[1].content.length < MAX_DIFF_CHARS + 100);
+  it("success: review strips reasoning and a code fence", async () => {
+    const reply = '<think>hmm</think>```json\n{"summary": "Fine.", "comments": []}\n```';
+    assert.deepEqual((await reviewDiff(fakeModel(reply).model, "m", "t", DIFF)).slice(0, 2), ["Fine.", []]);
   });
 
-  it("success: review is capped to fit a comment", async () => {
-    const { model } = fakeModel("x".repeat(MAX_REVIEW_CHARS + 500));
-    assert.equal((await reviewDiff(model, "m", "t", "+x\n")).length, MAX_REVIEW_CHARS);
+  it("failure: a review that is not JSON becomes the summary", async () => {
+    assert.deepEqual((await reviewDiff(fakeModel("Looks good to me.").model, "m", "t", DIFF)).slice(0, 2), ["Looks good to me.", []]);
+  });
+
+  it("failure: review drops malformed comments and keeps at most six", async () => {
+    const good = { path: "cart.js", line: 7, body: "x" };
+    const reply = JSON.stringify({ summary: "s", comments: [{ path: "cart.js", line: "7", body: "x" }, { path: "cart.js", line: 7, body: " " }, "nope", ...Array(9).fill(good)] });
+    assert.equal((await reviewDiff(fakeModel(reply).model, "m", "t", DIFF))[1].length, MAX_COMMENTS);
+  });
+
+  it("success: review cuts a large diff and says so", async () => {
+    const { model, calls } = fakeModel();
+    const big = DIFF + Array.from({ length: 20_000 }, (_, i) => `+line ${i}`).join("\n");
+    assert.match((await reviewDiff(model, "m", "t", big))[0], /characters of the diff were reviewed\.$/);
+    assert.ok(calls[0].messages[1].content.length < MAX_DIFF_CHARS + 200);
   });
 
   it("success: review of an empty diff skips the model", async () => {
     const { model, calls } = fakeModel();
-    assert.match(await reviewDiff(model, "m", "t", "  \n"), /no changes/);
+    assert.match((await reviewDiff(model, "m", "t", ""))[0], /no changes/);
     assert.equal(calls.length, 0);
   });
 
@@ -128,17 +157,44 @@ describe("review and tests", () => {
   });
 });
 
-describe("the comment", () => {
-  it("success: carries the marker, status and output", () => {
-    const body = commentBody("- bug", "npm test", 1, "not ok 1\n", HEAD);
-    assert.ok(body.startsWith(COMMENT_MARKER));
-    assert.match(body, /### Review of bbbbbbb[\s\S]*### Tests failed \(exit 1\)[\s\S]*not ok 1/);
+describe("inline comments", () => {
+  const lines = numberDiff(DIFF)[1];
+
+  it("success: carries a reindented suggestion", () => {
+    const [placed, unplaced] = inlineComments([{ path: "cart.js", line: 7, body: "NaN for @octocat's code.", suggestion: "      return total;\n" }], lines);
+    assert.deepEqual(unplaced, []);
+    assert.deepEqual(placed, [{ path: "cart.js", line: 7, side: "RIGHT", body: "NaN for @\u200boctocat's code.\n\n```suggestion\n  return total;\n```" }]);
+  });
+
+  it("success: spans lines in one hunk", () => {
+    const [placed] = inlineComments([{ path: "cart.js", line: 6, end_line: 7, body: "b" }], lines);
+    assert.deepEqual(placed, [{ path: "cart.js", line: 7, side: "RIGHT", body: "b", start_line: 6, start_side: "RIGHT" }]);
+  });
+
+  it("failure: a comment without a diff line goes to the body", () => {
+    for (const c of [{ path: "cart.js", line: 2, body: "outside" }, { path: "other.js", line: 7, body: "not in the diff" },
+      { path: "cart.js", line: 7, end_line: 6, body: "backwards" }, { path: "cart.js", line: 7, end_line: 30, body: "past the hunk" }]) {
+      const [placed, unplaced] = inlineComments([c], lines);
+      assert.deepEqual([placed, unplaced], [[], [{ path: c.path, line: c.line, body: c.body }]]);
+    }
+  });
+});
+
+describe("the review body", () => {
+  it("success: leads with the test result", () => {
+    const body = reviewBody("Adds discounts.", [], "npm test", 0, "ok\n");
+    assert.ok(body.startsWith(REVIEW_MARKER));
+    assert.ok(body.includes("**Tests passed** in an isolated NeevCloud sandbox: `npm test`\n\nAdds discounts."));
+  });
+
+  it("success: lists comments without a line, and failures", () => {
+    const body = reviewBody("", [{ path: "a.js", line: 2, body: "b" }], "npm test", 1, "not ok\n");
+    assert.ok(body.includes("**Tests failed (exit 1)**") && body.includes("- `a.js:2` b") && body.includes("not ok"));
   });
 
   it("success: quiets mentions and cannot be closed by test output", () => {
-    const body = commentBody("ping @octocat", "npm test", 0, "````\nsneaky\n", HEAD);
-    assert.ok(!body.includes("@octocat") && body.includes("@\u200boctocat"));
-    assert.ok(body.includes("`````\n````\nsneaky"));
+    const body = reviewBody("ping @octocat", [], "npm test", 0, "````\nsneaky\n");
+    assert.ok(!body.includes("@octocat") && body.includes("`````\n````\nsneaky"));
   });
 });
 
@@ -158,49 +214,56 @@ describe("GitHub", () => {
     await assert.rejects(new GitHub("o/r", undefined, fakeGitHub().fetchFn).pullRequest(8), /GitHub GET \/repos\/o\/r\/pulls\/8 returned 404/);
   });
 
-  it("success: upsert updates this recipe's earlier comment", async () => {
-    const gh = fakeGitHub({
-      "GET /repos/o/r/issues/7/comments?per_page=100&page=1": [{ id: 1, body: "lgtm", user: { login: "octocat" } }, { id: 2, body: `${COMMENT_MARKER}\nold`, user: { login: "github-actions[bot]" } }],
-      "PATCH /repos/o/r/issues/comments/2": { html_url: "https://github.com/o/r/pull/7#c2" },
-    });
-    assert.equal(await new GitHub("o/r", "t", gh.fetchFn).upsertComment(7, "new"), "https://github.com/o/r/pull/7#c2");
-    assert.deepEqual(gh.requests.at(-1)!.body, { body: "new" });
+  it("success: postReview sends inline comments on the head commit", async () => {
+    const gh = fakeGitHub({ [`POST ${REVIEWS}`]: { html_url: "https://github.com/o/r/pull/7#r1" } });
+    const comments = [{ path: "cart.js", line: 7, side: "RIGHT" as const, body: "b" }];
+    assert.equal(await new GitHub("o/r", "t", gh.fetchFn).postReview(7, HEAD, "body", comments), "https://github.com/o/r/pull/7#r1");
+    assert.deepEqual(gh.requests.at(-1)!.body, { commit_id: HEAD, event: "COMMENT", body: "body", comments });
   });
 
-  it("success: upsert pages, then posts when there is no earlier comment", async () => {
-    const gh = fakeGitHub({
-      "GET /repos/o/r/issues/7/comments?per_page=100&page=1": Array.from({ length: 100 }, (_, id) => ({ id, body: "x" })),
-      "GET /repos/o/r/issues/7/comments?per_page=100&page=2": [],
-      "POST /repos/o/r/issues/7/comments": { html_url: "https://github.com/o/r/pull/7#c9" },
-    });
-    assert.equal(await new GitHub("o/r", "t", gh.fetchFn).upsertComment(7, "new"), "https://github.com/o/r/pull/7#c9");
-    assert.deepEqual(gh.requests.map((r) => r.method), ["GET", "GET", "GET", "POST"]); // /user, two pages, post
+  it("failure: postReview folds comments into the body when GitHub refuses a line", async () => {
+    const sent: any[] = [];
+    const fetchFn = (async (_url: string, init: RequestInit) => {
+      const body = JSON.parse(init.body as string);
+      sent.push(body);
+      return body.comments.length ? new Response("{}", { status: 422 }) : new Response(JSON.stringify({ html_url: "u" }), { status: 200 });
+    }) as unknown as typeof fetch;
+    await new GitHub("o/r", "t", fetchFn).postReview(7, HEAD, "body", [{ path: "a.js", line: 3, side: "RIGHT", body: "b" }]);
+    assert.deepEqual([sent.at(-1).comments, sent.at(-1).body], [[], "body\n\n- `a.js:3` b"]);
   });
 
-  it("failure: upsert never edits someone else's comment that quotes the marker", async () => {
+  it("success: alreadyReviewed matches our review of this commit only", async () => {
+    const page: unknown[] = [{ commit_id: HEAD, body: `${REVIEW_MARKER} quoted`, user: { login: "attacker" } },
+      { commit_id: BASE, body: REVIEW_MARKER, user: { login: "github-actions[bot]" } }];
+    const gh = fakeGitHub({ [`GET ${REVIEWS}?per_page=100&page=1`]: page });
+    assert.equal(await new GitHub("o/r", "t", gh.fetchFn).alreadyReviewed(7, HEAD), false);
+    page.push({ commit_id: HEAD, body: REVIEW_MARKER, user: { login: "github-actions[bot]" } });
+    assert.equal(await new GitHub("o/r", "t", gh.fetchFn).alreadyReviewed(7, HEAD), true);
+  });
+
+  it("success: alreadyReviewed pages and uses the token's login", async () => {
     const gh = fakeGitHub({
       "GET /user": { login: "maintainer" },
-      "GET /repos/o/r/issues/7/comments?per_page=100&page=1": [
-        { id: 3, body: `${COMMENT_MARKER} gotcha`, user: { login: "attacker" } },
-        { id: 4, body: `${COMMENT_MARKER}\nold`, user: { login: "maintainer" } }],
-      "PATCH /repos/o/r/issues/comments/4": { html_url: "https://github.com/o/r/pull/7#c4" },
+      [`GET ${REVIEWS}?per_page=100&page=1`]: Array(100).fill({ commit_id: BASE, body: "x" }),
+      [`GET ${REVIEWS}?per_page=100&page=2`]: [{ commit_id: HEAD, body: REVIEW_MARKER, user: { login: "maintainer" } }],
     });
-    assert.equal(await new GitHub("o/r", "t", gh.fetchFn).upsertComment(7, "new"), "https://github.com/o/r/pull/7#c4");
-    assert.ok(!gh.requests.some((r) => r.method === "PATCH" && r.path.endsWith("/comments/3")));
+    assert.equal(await new GitHub("o/r", "t", gh.fetchFn).alreadyReviewed(7, HEAD), true);
   });
 });
 
 describe("the whole run", () => {
-  it("success: prints the comment and deletes the sandbox", async () => {
+  it("success: prints the review and deletes the sandbox", async () => {
     const { code, created, sandbox, gh, lines } = await runWith();
     assert.equal(code, 0);
     assert.ok(sandbox.deleted);
     assert.deepEqual(created[0].allowEgress, ["github.com", "registry.npmjs.org"]);
     assert.match(created[0].name as string, /^pr-review-[0-9a-f]{8}$/);
     assert.equal((created[0].lifecycle as Record<string, unknown>).on_idle, "delete");
-    assert.ok(lines.some((l) => l.startsWith(COMMENT_MARKER)));
+    assert.ok(lines.includes("   Review ready in 0s: 1 inline comments"));
+    assert.ok(lines.some((l) => l.startsWith(REVIEW_MARKER)));
+    assert.ok(lines.includes("   cart.js:7\n      This returns NaN for an unknown code.\n      \n      ```suggestion\n        return total;\n      ```"));
     assert.deepEqual(gh.requests.map((r) => r.method), ["GET"]); // read the pull request, posted nothing
-    assert.ok(lines.includes("   2 diff lines; the GitHub token was used for this step only and never stored"));
+    assert.ok(lines.includes("   8 diff lines; the GitHub token was used for this step only and never stored"));
   });
 
   it("success: GitHub access is removed before the tests run", async () => {
@@ -209,24 +272,33 @@ describe("the whole run", () => {
     assert.deepEqual(sandbox.updates[0], { egress_remove: { allow: [{ host: "github.com" }] } });
   });
 
-  it("success: posts when asked", async () => {
+  it("success: posts a review when asked", async () => {
     const { code, gh, lines } = await runWith({
       post: true,
-      routes: {
-        "GET /repos/o/r/issues/7/comments?per_page=100&page=1": [],
-        "POST /repos/o/r/issues/7/comments": { html_url: "https://github.com/o/r/pull/7#c1" },
-      },
+      routes: { [`GET ${REVIEWS}?per_page=100&page=1`]: [], [`POST ${REVIEWS}`]: { html_url: "https://github.com/o/r/pull/7#r1" } },
     });
     assert.equal(code, 0);
-    assert.ok(lines.includes("6. Posted the review: https://github.com/o/r/pull/7#c1"));
-    assert.ok(gh.requests.at(-1)!.body.body.startsWith(COMMENT_MARKER));
+    assert.ok(lines.includes("6. Posted the review: https://github.com/o/r/pull/7#r1"));
+    const sent = gh.requests.at(-1)!.body;
+    assert.ok(sent.body.startsWith(REVIEW_MARKER));
+    assert.equal(sent.comments[0].path, "cart.js");
   });
 
-  it("failure: failing tests fail the run but still comment", async () => {
+  it("success: does not post twice for one commit", async () => {
+    const { code, gh, lines } = await runWith({
+      post: true,
+      routes: { [`GET ${REVIEWS}?per_page=100&page=1`]: [{ commit_id: HEAD, body: REVIEW_MARKER, user: { login: "github-actions[bot]" } }] },
+    });
+    assert.equal(code, 0);
+    assert.ok(lines.includes("6. bbbbbbb already has this recipe's review; not posting it again."));
+    assert.ok(!gh.requests.some((r) => r.method === "POST"));
+  });
+
+  it("failure: failing tests fail the run but still review", async () => {
     const { code, sandbox, lines } = await runWith({ sandbox: fakeSandbox({ testEvents: [{ type: "stdout", data: "not ok\n" }, { type: "exit", exitCode: 1 }] }) });
     assert.equal(code, 1);
     assert.ok(sandbox.deleted);
-    assert.ok(lines.some((l) => l.includes("### Tests failed (exit 1)")));
+    assert.ok(lines.some((l) => l.includes("**Tests failed (exit 1)**")));
   });
 
   it("failure: a fetch error is one line and cleans up", async () => {
