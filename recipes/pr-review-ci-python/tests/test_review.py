@@ -1,11 +1,13 @@
 import base64
 import json
+import os
+from types import SimpleNamespace
 
 import pytest
 
 import review
 from review import (
-    REVIEW_MARKER, GitHub, ReviewError, fetch_pull_request, git_auth_env, guide_note, inline_comments, missing_env,
+    REVIEW_MARKER, GitHub, ReviewError, fetch_pull_request, git_auth_env, guide_note, inline_comments, local_diff, missing_env,
     number_diff, pr_from_actions, prior_note, review_body, review_diff, run, run_tests, wait_for_host,
 )
 from tests.fakes import BASE, DIFF, HEAD, FakeClient, FakeGitHubAPI, FakeModel, FakeSandbox
@@ -67,7 +69,7 @@ def test_success_fetch_never_puts_the_token_in_a_command_line():
     assert all("ghs_secret" not in " ".join(args) for args, _ in git_calls)
     fetch_args = next(args for args, _ in git_calls if "fetch" in args)
     assert fetch_args[-3:] == ["https://github.com/o/r.git", BASE, HEAD]
-    assert ["diff", "--no-color", "--no-ext-diff", f"{BASE}...{HEAD}"] == next(
+    assert ["diff", "--no-color", "--no-ext-diff", "--no-textconv", f"{BASE}...{HEAD}"] == next(
         args for args, _ in git_calls if "diff" in args)[2:]
 
 
@@ -85,10 +87,38 @@ def test_success_fetch_leaves_excluded_files_out_of_the_diff():
     assert diff_args[-4:] == ["--", ".", ":(exclude,glob)**/*.gen.go", ":(exclude,glob)**/mocks/**"]
 
 
-def test_success_review_only_fetch_skips_the_checkout():
-    sandbox = FakeSandbox()
-    fetch_pull_request(sandbox, "o/r", PR, None, checkout=False)
-    assert not any("checkout" in args for command, args, _ in sandbox.execs if command == "git")
+class FakeGit:
+    """Plays git for local_diff: records each command and its environment, and fails the step named in fail."""
+
+    def __init__(self, fail=None):
+        self.calls = []
+        self.fail = fail
+
+    def __call__(self, args, env=None, capture_output=None, text=None, timeout=None):
+        self.calls.append((args, env))
+        if self.fail and self.fail in args:
+            return SimpleNamespace(returncode=128, stdout="", stderr="fatal: repository not found")
+        return SimpleNamespace(returncode=0, stdout=DIFF if "diff" in args else "", stderr="")
+
+
+def test_success_local_diff_fetches_without_a_checkout_and_cleans_up():
+    git = FakeGit()
+    assert local_diff("o/r", PR, "ghs_secret", ["**/*.gen.go"], run=git) == DIFF
+    commands = [args[3:] for args, _ in git.calls]
+    assert [c[0] for c in commands] == ["init", "fetch", "diff"]
+    assert commands[1][-3:] == ["https://github.com/o/r.git", BASE, HEAD]
+    assert commands[2][-1] == ":(exclude,glob)**/*.gen.go"
+    workdir = git.calls[0][0][2]
+    assert not os.path.exists(workdir)
+    assert all("ghs_secret" not in " ".join(args) for args, _ in git.calls)
+    assert git.calls[1][1]["GIT_CONFIG_KEY_0"] == "http.extraHeader"
+
+
+def test_failure_local_diff_reports_gits_error_and_cleans_up():
+    git = FakeGit(fail="fetch")
+    with pytest.raises(ReviewError, match="git fetch failed: fatal: repository not found"):
+        local_diff("o/r", PR, None, run=git)
+    assert not os.path.exists(git.calls[0][0][2])
 
 
 def test_failure_wait_for_host_gives_up_after_its_budget():
@@ -417,13 +447,14 @@ def test_success_no_limit_keeps_reviewing():
     assert code == 0 and api.requests[-1][0] == "POST" and "Review 6 of" not in api.requests[-1][2]["body"]
 
 
-def test_success_review_only_run_skips_the_tests_and_the_checkout():
-    sandbox = FakeSandbox()
-    code, client, _, lines = _run(sandbox=sandbox, test_cmd="")
-    assert code == 0 and sandbox.stream_calls == [] and client.sandbox.deleted
-    assert "5. No test command: review only." in lines
-    assert not any("checkout" in args for command, args, _ in sandbox.execs if command == "git")
-    assert not any("Tests passed" in line for line in lines)
+def test_success_review_only_run_creates_no_sandbox(monkeypatch):
+    monkeypatch.setattr(review, "local_diff", lambda repo, pr, token, exclude: DIFF)
+    client = FakeClient(create_error=AssertionError("a review-only run must not create a sandbox"))
+    code, _, _, lines = _run(client=client, test_cmd="")
+    assert code == 0 and client.created == []
+    assert "2. Fetching the pull request's diff (review only: none of its code runs, so no sandbox)..." in lines
+    assert "3. Reviewing the diff with glm-4-7..." in lines and "4. The review this run would post:\n" in lines
+    assert not any("Tests passed" in line or "Sandbox deleted" in line for line in lines)
 
 
 def test_failure_failing_tests_fail_the_run_but_still_review():
@@ -471,6 +502,11 @@ def test_failure_delete_error_is_a_warning_not_a_traceback():
 def _clear(monkeypatch):
     for name in (*review.REQUIRED_ENV, "GITHUB_TOKEN", "GITHUB_ACTIONS", "GITHUB_EVENT_PATH"):
         monkeypatch.delenv(name, raising=False)
+
+
+def test_success_review_only_needs_only_the_model_key():
+    assert missing_env({"NEEV_MODEL_API_KEY": "m"}, review_only=True) == []
+    assert missing_env({}, review_only=True) == ["NEEV_MODEL_API_KEY"]
 
 
 def test_failure_main_names_missing_variables(monkeypatch, capsys):

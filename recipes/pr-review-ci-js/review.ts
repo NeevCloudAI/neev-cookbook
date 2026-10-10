@@ -1,12 +1,16 @@
 // Pull request review in CI: fetch a pull request into a sandbox, review its diff with a model, run its tests
 // there instead of on the CI runner, and post the result as a review with inline comments on the pull request.
+import { execFile } from "node:child_process";
 import { randomBytes } from "node:crypto";
-import { readFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 import { pathToFileURL } from "node:url";
 import { parseArgs } from "node:util";
 
 export const REQUIRED_ENV = ["NEEV_API_KEY", "NEEV_ORG_ID", "NEEV_PROJECT_ID", "NEEV_MODEL_API_KEY"] as const;
+const REVIEW_ONLY_ENV = ["NEEV_MODEL_API_KEY"] as const; // a review-only run creates no sandbox
 const MODEL_BASE_URL = "https://inference.ai.neevcloud.com/v1";
 const DEFAULT_MODEL = "glm-4-7";
 
@@ -90,9 +94,9 @@ export interface History { passes: number; reviewedHead: boolean; prior: PriorCo
 // ReviewError is a failure with a one-line message for the reader, such as a pull request that cannot be found.
 export class ReviewError extends Error {}
 
-// missingEnv returns the required variables that are not set.
-export function missingEnv(env: Record<string, string | undefined>): string[] {
-  return REQUIRED_ENV.filter((name) => !env[name]);
+// missingEnv returns the required variables that are not set; a review-only run needs only the model key.
+export function missingEnv(env: Record<string, string | undefined>, reviewOnly = false): string[] {
+  return (reviewOnly ? REVIEW_ONLY_ENV : REQUIRED_ENV).filter((name) => !env[name]);
 }
 
 // prFromActions returns [repo, number] when running in a GitHub Actions job triggered by a pull request.
@@ -216,20 +220,54 @@ export async function waitForHost(sandbox: SandboxLike, host: string, timeoutMs 
   }
 }
 
+// diffArgs are git diff arguments for the pull request's changes, leaving out files that match the exclude globs.
+function diffArgs(pr: PullRequest, exclude: string[] = []): string[] {
+  const pathspec = exclude.length ? ["--", ".", ...exclude.map((glob) => `:(exclude,glob)${glob}`)] : [];
+  return ["diff", "--no-color", "--no-ext-diff", "--no-textconv", `${pr.base}...${pr.head}`, ...pathspec];
+}
+
 // fetchPullRequest fetches the base and head commits into the sandbox, checks out the head for the tests, and returns
 // the diff. exclude holds globs, such as **/*.gen.go, for files left out of the diff the model reviews.
 export async function fetchPullRequest(sandbox: SandboxLike, repo: string, pr: PullRequest, token: string | undefined,
-  opts: { sleep?: (ms: number) => Promise<unknown>; signal?: AbortSignal; exclude?: string[]; checkout?: boolean } = {}): Promise<string> {
+  opts: { sleep?: (ms: number) => Promise<unknown>; signal?: AbortSignal; exclude?: string[] } = {}): Promise<string> {
   const env = gitAuthEnv(token);
   await waitForHost(sandbox, GIT_HOST, NETWORK_WAIT_MS, opts.sleep, opts.signal);
   await sandbox.exec(["git", "init", "-q", REPO_DIR], { timeoutMs: FETCH_TIMEOUT_MS, signal: opts.signal });
   // Blobless: full history for the merge base, file contents only for what is checked out or diffed.
   // --progress keeps output flowing, since a command that prints nothing for 60 seconds is stopped.
   await git(sandbox, ["fetch", "--progress", "--no-tags", "--filter=blob:none", `https://${GIT_HOST}/${repo}.git`, pr.base, pr.head], env, "fetch", opts.signal);
-  if (opts.checkout ?? true) await git(sandbox, ["checkout", "--quiet", "--detach", pr.head], env, "checkout", opts.signal);
-  const exclude = opts.exclude ?? [];
-  const pathspec = exclude.length ? ["--", ".", ...exclude.map((glob) => `:(exclude,glob)${glob}`)] : [];
-  return (await git(sandbox, ["diff", "--no-color", "--no-ext-diff", `${pr.base}...${pr.head}`, ...pathspec], env, "diff", opts.signal)).stdout;
+  await git(sandbox, ["checkout", "--quiet", "--detach", pr.head], env, "checkout", opts.signal);
+  return (await git(sandbox, diffArgs(pr, opts.exclude), env, "diff", opts.signal)).stdout;
+}
+
+// RunGit runs one git command on this machine and resolves to its exit code and output.
+export type RunGit = (args: string[], env: NodeJS.ProcessEnv) => Promise<{ code: number; stdout: string; stderr: string }>;
+
+// runGit runs git with execFile; a large diff fits in its 64 MiB output buffer.
+const runGit: RunGit = (args, env) => new Promise((resolve) => {
+  execFile("git", args, { env, timeout: FETCH_TIMEOUT_MS, maxBuffer: 64 << 20 }, (err, stdout, stderr) =>
+    resolve({ code: err ? (typeof err.code === "number" ? err.code : 1) : 0, stdout, stderr }));
+});
+
+// localDiff fetches the base and head commits into a temporary directory on this machine and returns the diff.
+// For review-only runs, where none of the pull request's code runs: git only reads its objects, and with no checkout
+// no file from the pull request is written to disk. The token rides in the environment, never on disk.
+export async function localDiff(repo: string, pr: PullRequest, token: string | undefined, exclude: string[] = [],
+  run: RunGit = runGit): Promise<string> {
+  const workdir = mkdtempSync(join(tmpdir(), "pr-review-"));
+  const env = { ...process.env, ...gitAuthEnv(token) };
+  const git = async (args: string[], what: string) => {
+    const result = await run(["-C", workdir, ...args], env);
+    if (result.code !== 0) throw new ReviewError(`git ${what} failed: ${(result.stderr || result.stdout).trim().slice(-300)}`);
+    return result.stdout;
+  };
+  try {
+    await git(["init", "-q"], "init");
+    await git(["fetch", "--quiet", "--no-tags", "--filter=blob:none", `https://${GIT_HOST}/${repo}.git`, pr.base, pr.head], "fetch");
+    return await git(diffArgs(pr, exclude), "diff");
+  } finally {
+    rmSync(workdir, { recursive: true, force: true });
+  }
 }
 
 // closeGitAccess removes GitHub from the sandbox's egress allow-list, so the pull request's code cannot reach it.
@@ -426,20 +464,24 @@ export function reviewBody(summary: string, unplaced: { path: string; line: numb
 
 export interface RunOptions {
   repo: string; number: number; testCmd: string; registries: string[]; post: boolean;
-  neev: NeevLike; modelClient: ModelLike; model: string; github: GitHub;
+  neev?: NeevLike; modelClient: ModelLike; model: string; github: GitHub; // neev is not needed to review only
   log?: Log; signal?: AbortSignal; sleep?: (ms: number) => Promise<unknown>;
   maxReviews?: number; // reviews per pull request, then tests only (default MAX_REVIEWS; 0: no limit)
   guide?: string; // the repository's conventions, for the review to apply
   exclude?: string[]; // globs of files left out of the reviewed diff
+  localDiff?: typeof localDiff; // takes a review-only run's diff on this machine
 }
 
 // run reviews and tests one pull request in a fresh sandbox, posts or prints the review, and always deletes the sandbox.
-// A pull request gets at most maxReviews reviews; after that its pushes are only tested. An empty testCmd reviews only.
+// A pull request gets at most maxReviews reviews; after that its pushes are only tested. An empty testCmd reviews only:
+// no sandbox is created, since none of the pull request's code runs, and the diff is taken on this machine.
 export async function run(o: RunOptions): Promise<number> {
   const { log = console.log, signal, maxReviews = MAX_REVIEWS } = o;
   let sandbox: SandboxLike | undefined;
+  let step = 0;
+  const next = () => ++step;
   try {
-    log(`1. Reading ${o.repo}#${o.number} from GitHub...`);
+    log(`${next()}. Reading ${o.repo}#${o.number} from GitHub...`);
     const pr = await o.github.pullRequest(o.number);
     log(`   "${pr.title}" (${pr.base.slice(0, 7)}...${pr.head.slice(0, 7)})`);
     // Only a run that posts looks at earlier reviews; a dry run always reviews.
@@ -448,23 +490,30 @@ export async function run(o: RunOptions): Promise<number> {
     if (history.reviewedHead) skip = `${pr.head.slice(0, 7)} already has this recipe's review`;
     else if (maxReviews && history.passes >= maxReviews) skip = `the pull request has had its ${maxReviews} reviews`;
     if (history.passes) log(`   ${history.passes} earlier review(s), ${history.prior.length} inline comment(s)`);
-    log(`2. Creating a sandbox (egress allow-list: ${[GIT_HOST, ...o.registries].join(", ")})...`);
-    sandbox = await o.neev.sandboxes.create({
-      name: `pr-review-${randomBytes(4).toString("hex")}`, resources: SANDBOX_RESOURCES, lifecycle: SANDBOX_LIFECYCLE,
-      allowEgress: [GIT_HOST, ...o.registries],
-    });
-    await sandbox.waitUntilReady({ timeoutMs: 300_000 });
-    log("3. Fetching the pull request into the sandbox...");
-    const diff = await fetchPullRequest(sandbox, o.repo, pr, o.github.token, { sleep: o.sleep, signal, exclude: o.exclude, checkout: Boolean(o.testCmd) });
     const tokenNote = o.github.token ? "; the GitHub token was used for this step only and never stored" : "";
-    log(`   ${diff.split("\n").length - 1} diff lines${tokenNote}`);
-    await closeGitAccess(sandbox);
-    log(`   Removed ${GIT_HOST} from the allow-list: the pull request's code can reach only ${o.registries.join(", ") || "nothing"}`);
+    let diff: string;
+    if (o.testCmd) {
+      log(`${next()}. Creating a sandbox (egress allow-list: ${[GIT_HOST, ...o.registries].join(", ")})...`);
+      sandbox = await o.neev!.sandboxes.create({
+        name: `pr-review-${randomBytes(4).toString("hex")}`, resources: SANDBOX_RESOURCES, lifecycle: SANDBOX_LIFECYCLE,
+        allowEgress: [GIT_HOST, ...o.registries],
+      });
+      await sandbox.waitUntilReady({ timeoutMs: 300_000 });
+      log(`${next()}. Fetching the pull request into the sandbox...`);
+      diff = await fetchPullRequest(sandbox, o.repo, pr, o.github.token, { sleep: o.sleep, signal, exclude: o.exclude });
+      log(`   ${diff.split("\n").length - 1} diff lines${tokenNote}`);
+      await closeGitAccess(sandbox);
+      log(`   Removed ${GIT_HOST} from the allow-list: the pull request's code can reach only ${o.registries.join(", ") || "nothing"}`);
+    } else {
+      log(`${next()}. Fetching the pull request's diff (review only: none of its code runs, so no sandbox)...`);
+      diff = await (o.localDiff ?? localDiff)(o.repo, pr, o.github.token, o.exclude);
+      log(`   ${diff.split("\n").length - 1} diff lines${tokenNote}`);
+    }
     let placed: InlineComment[] = [], unplaced: { path: string; line: number; body: string }[] = [], summary = "";
     if (skip) {
-      log(`4. Not reviewing: ${skip}; the tests still run.`);
+      log(`${next()}. Not reviewing: ${skip}${o.testCmd ? "; the tests still run." : "."}`);
     } else {
-      log(`4. Reviewing the diff with ${o.model}...`);
+      log(`${next()}. Reviewing the diff with ${o.model}...`);
       const started = Date.now();
       const [s, comments, commentable] = await reviewDiff(o.modelClient, o.model, pr.title, diff, signal, history.prior, o.guide);
       summary = s;
@@ -474,26 +523,24 @@ export async function run(o: RunOptions): Promise<number> {
     }
     let exitCode = 0, tail = "";
     if (o.testCmd) {
-      log(`5. Running \`${o.testCmd}\` in the sandbox...`);
-      [exitCode, tail] = await runTests(sandbox, o.testCmd, log, signal);
+      log(`${next()}. Running \`${o.testCmd}\` in the sandbox...`);
+      [exitCode, tail] = await runTests(sandbox!, o.testCmd, log, signal);
       log(`   Tests ${exitCode === 0 ? "passed" : `failed (exit ${exitCode})`}`);
-    } else {
-      log("5. No test command: review only.");
     }
     const passNumber = history.passes + 1;
     const lastNote = maxReviews && passNumber === maxReviews ? `Review ${passNumber} of ${maxReviews}: later pushes are tested but not reviewed.` : "";
     const body = reviewBody(summary, unplaced, o.testCmd, exitCode, tail, lastNote);
     if (skip) {
-      log(`6. Not posting: ${skip}.`);
+      log(`${next()}. Not posting: ${skip}.`);
     } else if (!o.post) {
-      log("6. The review this run would post:\n");
+      log(`${next()}. The review this run would post:\n`);
       log(body);
       for (const c of placed) {
         const where = `${c.path}:${c.start_line ?? c.line}${c.start_line ? `-${c.line}` : ""}`;
         log(`   ${where}\n${c.body.split("\n").map((l) => `      ${l}`).join("\n")}`);
       }
     } else {
-      log(`6. Posted the review: ${await o.github.postReview(o.number, pr.head, body, placed)}`);
+      log(`${next()}. Posted the review: ${await o.github.postReview(o.number, pr.head, body, placed)}`);
     }
     return exitCode === 0 ? 0 : 1;
   } catch (e) {
@@ -552,18 +599,19 @@ export async function main(argv: string[], env: Record<string, string | undefine
   const post = !(values["dry-run"] || demo); // the demo is someone else's pull request: print, never post
   const token = env.GITHUB_TOKEN || undefined;
 
-  const missing = [...missingEnv(env), ...(post && !token ? ["GITHUB_TOKEN"] : [])];
+  const reviewOnly = !values["test-cmd"];
+  const missing = [...missingEnv(env, reviewOnly), ...(post && !token ? ["GITHUB_TOKEN"] : [])];
   if (missing.length) { console.error(`Missing environment variables: ${missing.join(", ")}. See README.md.`); return 2; }
   if (!REPO_RE.test(repo)) { console.error(`Not a repository name: ${JSON.stringify(repo)}; use owner/name.`); return 2; }
 
-  const { Neev } = await import("@neevcloud/sdk");
   const { default: OpenAI } = await import("openai");
+  const neev = reviewOnly ? undefined : new (await import("@neevcloud/sdk")).Neev() as unknown as NeevLike;
   const ac = new AbortController();
   // Keep the handler for repeated presses, so a second Ctrl+C cannot skip the cleanup.
   process.on("SIGINT", () => ac.abort());
   return run({
     repo, number, testCmd: values["test-cmd"]!, registries: values.allow ?? DEFAULT_REGISTRIES, post,
-    neev: new Neev() as unknown as NeevLike,
+    neev,
     modelClient: new OpenAI({ baseURL: MODEL_BASE_URL, apiKey: env.NEEV_MODEL_API_KEY, maxRetries: 0 }) as unknown as ModelLike,
     model: env.MODEL ?? DEFAULT_MODEL, github: new GitHub(repo, token), signal: ac.signal, maxReviews, guide, exclude: values.exclude ?? [],
   });

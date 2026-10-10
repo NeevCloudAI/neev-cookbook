@@ -29,7 +29,7 @@ export GITHUB_TOKEN=$(gh auth token)
 python review.py --repo your-org/your-repo --pr 42 --dry-run
 ```
 
-- `--test-cmd`: what to run in the checkout (default `npm ci && npm test`), for example `pip install -r requirements.txt && pytest`. An empty string (`--test-cmd ""`) reviews only, for a repository whose CI already builds and tests.
+- `--test-cmd`: what to run in the checkout (default `npm ci && npm test`), for example `pip install -r requirements.txt && pytest`. An empty string (`--test-cmd ""`) reviews only, for a repository whose CI already builds and tests. Nothing from the pull request runs then, so no sandbox is created: the diff is taken on the runner, and only `NEEV_MODEL_API_KEY` (plus `GITHUB_TOKEN` to post) is needed.
 - `--allow`: a host the tests may reach, repeatable (default `registry.npmjs.org`). For Python, pass `--allow pypi.org --allow files.pythonhosted.org`.
 - `--exclude`: a glob of files to leave out of the reviewed diff, repeatable, such as `--exclude '**/*.gen.go' --exclude '**/mocks/**'` for generated code.
 - `--guide`: a file of your team's conventions, such as `AGENTS.md` or `CONTRIBUTING.md`. The review also flags changed code that clearly breaks one. In the workflow, read it from the base branch so a pull request cannot rewrite the rules it is reviewed against.
