@@ -42,6 +42,8 @@ python review.py --repo your-org/your-repo --pr 42 --dry-run
 2. Add the repository secrets `NEEV_API_KEY`, `NEEV_MODEL_API_KEY`, `NEEV_ORG_ID` and `NEEV_PROJECT_ID`.
 3. Set `--test-cmd` (and `--allow`) in the workflow to match your project, and open a pull request.
 
+To choose the model, set the repository variable `PR_REVIEW_MODEL` (`gh variable set PR_REVIEW_MODEL --body <model>`). Without it the recipe uses `glm-4-7`.
+
 The workflow checks out only `.github/pr-review/`, from the base branch, so the runner never runs the pull request's code and a pull request cannot change the script that holds the keys. Each push gets its own review, the way a teammate re-reviews, up to three per pull request. A later review is shown the earlier comments and your replies to them, so it does not raise the same point again, and the third one says it is the last. Re-running a job on the same commit does not post twice.
 
 ## How it works

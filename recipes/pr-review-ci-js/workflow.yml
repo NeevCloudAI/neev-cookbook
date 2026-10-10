@@ -40,3 +40,4 @@ jobs:
           NEEV_ORG_ID: ${{ secrets.NEEV_ORG_ID }}
           NEEV_PROJECT_ID: ${{ secrets.NEEV_PROJECT_ID }}
           GITHUB_TOKEN: ${{ github.token }}
+          MODEL: ${{ vars.PR_REVIEW_MODEL }} # optional repository variable; empty uses the recipe's default

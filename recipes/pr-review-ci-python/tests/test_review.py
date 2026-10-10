@@ -212,6 +212,23 @@ def test_success_inline_comment_spans_lines_in_one_hunk():
                               "start_line": 6, "start_side": "RIGHT"}
 
 
+def test_success_suggestion_that_changes_nothing_is_dropped():
+    placed, _ = inline_comments([{"path": "cart.js", "line": 7, "body": "Pinned.",
+                                  "suggestion": "  return total - Number(code.slice(4));  "}], LINES)
+    assert placed[0]["body"] == "Pinned."
+
+
+@pytest.mark.parametrize("body", ["Ensure the label exists.", "verify this is intended", "Make sure it runs.",
+                                  "Double-check the pin.", "Consider renaming."])
+def test_failure_comment_that_only_asks_for_a_check_is_dropped(body):
+    assert inline_comments([{"path": "cart.js", "line": 7, "body": body}], LINES) == ([], [])
+
+
+def test_success_comment_that_mentions_a_check_later_is_kept():
+    placed, _ = inline_comments([{"path": "cart.js", "line": 7, "body": "This skips the check; ensure fails."}], LINES)
+    assert len(placed) == 1
+
+
 @pytest.mark.parametrize("comment", [
     {"path": "cart.js", "line": 2, "body": "outside the diff"},
     {"path": "other.js", "line": 7, "body": "not in the diff"},
