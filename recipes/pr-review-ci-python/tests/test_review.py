@@ -1,11 +1,13 @@
 import base64
 import json
+import os
+from types import SimpleNamespace
 
 import pytest
 
 import review
 from review import (
-    REVIEW_MARKER, GitHub, ReviewError, fetch_pull_request, git_auth_env, inline_comments, missing_env,
+    REVIEW_MARKER, GitHub, ReviewError, fetch_pull_request, git_auth_env, guide_note, inline_comments, local_diff, missing_env,
     number_diff, pr_from_actions, prior_note, review_body, review_diff, run, run_tests, wait_for_host,
 )
 from tests.fakes import BASE, DIFF, HEAD, FakeClient, FakeGitHubAPI, FakeModel, FakeSandbox
@@ -67,7 +69,7 @@ def test_success_fetch_never_puts_the_token_in_a_command_line():
     assert all("ghs_secret" not in " ".join(args) for args, _ in git_calls)
     fetch_args = next(args for args, _ in git_calls if "fetch" in args)
     assert fetch_args[-3:] == ["https://github.com/o/r.git", BASE, HEAD]
-    assert ["diff", "--no-color", "--no-ext-diff", f"{BASE}...{HEAD}"] == next(
+    assert ["diff", "--no-color", "--no-ext-diff", "--no-textconv", f"{BASE}...{HEAD}"] == next(
         args for args, _ in git_calls if "diff" in args)[2:]
 
 
@@ -76,6 +78,47 @@ def test_success_fetch_waits_for_the_network(monkeypatch):
     sandbox = FakeSandbox(dns_failures=3)
     fetch_pull_request(sandbox, "o/r", PR, None)
     assert [c for c, _, _ in sandbox.execs].count("getent") == 4
+
+
+def test_success_fetch_leaves_excluded_files_out_of_the_diff():
+    sandbox = FakeSandbox()
+    fetch_pull_request(sandbox, "o/r", PR, None, exclude=["**/*.gen.go", "**/mocks/**"])
+    diff_args = next(args for command, args, _ in sandbox.execs if command == "git" and "diff" in args)
+    assert diff_args[-4:] == ["--", ".", ":(exclude,glob)**/*.gen.go", ":(exclude,glob)**/mocks/**"]
+
+
+class FakeGit:
+    """Plays git for local_diff: records each command and its environment, and fails the step named in fail."""
+
+    def __init__(self, fail=None):
+        self.calls = []
+        self.fail = fail
+
+    def __call__(self, args, env=None, capture_output=None, text=None, timeout=None):
+        self.calls.append((args, env))
+        if self.fail and self.fail in args:
+            return SimpleNamespace(returncode=128, stdout="", stderr="fatal: repository not found")
+        return SimpleNamespace(returncode=0, stdout=DIFF if "diff" in args else "", stderr="")
+
+
+def test_success_local_diff_fetches_without_a_checkout_and_cleans_up():
+    git = FakeGit()
+    assert local_diff("o/r", PR, "ghs_secret", ["**/*.gen.go"], run=git) == DIFF
+    commands = [args[3:] for args, _ in git.calls]
+    assert [c[0] for c in commands] == ["init", "fetch", "diff"]
+    assert commands[1][-3:] == ["https://github.com/o/r.git", BASE, HEAD]
+    assert commands[2][-1] == ":(exclude,glob)**/*.gen.go"
+    workdir = git.calls[0][0][2]
+    assert not os.path.exists(workdir)
+    assert all("ghs_secret" not in " ".join(args) for args, _ in git.calls)
+    assert git.calls[1][1]["GIT_CONFIG_KEY_0"] == "http.extraHeader"
+
+
+def test_failure_local_diff_reports_gits_error_and_cleans_up():
+    git = FakeGit(fail="fetch")
+    with pytest.raises(ReviewError, match="git fetch failed: fatal: repository not found"):
+        local_diff("o/r", PR, None, run=git)
+    assert not os.path.exists(git.calls[0][0][2])
 
 
 def test_failure_wait_for_host_gives_up_after_its_budget():
@@ -216,6 +259,11 @@ def test_success_review_body_lists_comments_without_a_line_and_failures():
     assert "**Tests failed (exit 1)**" in body and "- `a.js:2` b" in body and "not ok" in body
 
 
+def test_success_review_only_body_has_no_test_result():
+    body = review_body("Adds discounts.", [], "", 0, "")
+    assert body == f"{REVIEW_MARKER}\n\nAdds discounts.\n"
+
+
 def test_success_review_body_quiets_mentions_and_cannot_be_closed_by_output():
     body = review_body("ping @octocat", [], "npm test", 0, "````\nsneaky\n")
     assert "@octocat" not in body and "`````\n````\nsneaky" in body
@@ -306,6 +354,15 @@ def test_success_prior_note_tells_the_model_not_to_repeat():
     assert prior_note([]) == ""
 
 
+def test_success_guide_goes_into_the_system_prompt():
+    model = FakeModel()
+    review_diff(model, "m", "t", DIFF, guide="Wrap errors with %w.")
+    system = model.calls[0]["messages"][0]["content"]
+    assert "<conventions>\nWrap errors with %w.\n</conventions>" in system and "naming the convention" in system
+    assert guide_note("  \n") == ""
+    assert len(guide_note("x" * 50_000)) < review.MAX_GUIDE_CHARS + 400
+
+
 def test_success_review_sends_earlier_comments_to_the_model():
     model = FakeModel()
     review_diff(model, "m", "t", DIFF, [{"path": "a.js", "line": 4, "body": "NaN here.", "replies": []}])
@@ -390,6 +447,16 @@ def test_success_no_limit_keeps_reviewing():
     assert code == 0 and api.requests[-1][0] == "POST" and "Review 6 of" not in api.requests[-1][2]["body"]
 
 
+def test_success_review_only_run_creates_no_sandbox(monkeypatch):
+    monkeypatch.setattr(review, "local_diff", lambda repo, pr, token, exclude: DIFF)
+    client = FakeClient(create_error=AssertionError("a review-only run must not create a sandbox"))
+    code, _, _, lines = _run(client=client, test_cmd="")
+    assert code == 0 and client.created == []
+    assert "2. Fetching the pull request's diff (review only: none of its code runs, so no sandbox)..." in lines
+    assert "3. Reviewing the diff with glm-4-7..." in lines and "4. The review this run would post:\n" in lines
+    assert not any("Tests passed" in line or "Sandbox deleted" in line for line in lines)
+
+
 def test_failure_failing_tests_fail_the_run_but_still_review():
     sandbox = FakeSandbox(test_events=[{"type": "stdout", "data": "not ok\n"}, {"type": "exit", "exit_code": 1}])
     code, client, _, lines = _run(sandbox=sandbox)
@@ -437,6 +504,11 @@ def _clear(monkeypatch):
         monkeypatch.delenv(name, raising=False)
 
 
+def test_success_review_only_needs_only_the_model_key():
+    assert missing_env({"NEEV_MODEL_API_KEY": "m"}, review_only=True) == []
+    assert missing_env({}, review_only=True) == ["NEEV_MODEL_API_KEY"]
+
+
 def test_failure_main_names_missing_variables(monkeypatch, capsys):
     _clear(monkeypatch)
     assert review.main([]) == 2
@@ -471,3 +543,23 @@ def test_failure_main_rejects_a_negative_review_ceiling(monkeypatch):
     with pytest.raises(SystemExit) as exc:
         review.main(["--max-reviews", "-1"])
     assert exc.value.code == 2
+
+
+def test_failure_main_reports_an_unreadable_guide(monkeypatch, capsys):
+    _clear(monkeypatch)
+    with pytest.raises(SystemExit) as exc:
+        review.main(["--guide", "/nonexistent/AGENTS.md"])
+    assert exc.value.code == 2 and "cannot read --guide" in capsys.readouterr().err
+
+
+def test_success_review_streams_the_reply():
+    model = FakeModel()
+    review_diff(model, "m", "t", DIFF)
+    assert model.calls[0]["stream"] is True
+
+
+def test_failure_review_that_outlasts_its_budget_stops(monkeypatch):
+    clock = iter([0.0, review.REVIEW_BUDGET_S + 1] + [review.REVIEW_BUDGET_S + 2] * 10)
+    monkeypatch.setattr(review.time, "monotonic", lambda: next(clock))
+    with pytest.raises(ReviewError, match="took longer than 300s"):
+        review_diff(FakeModel(), "m", "t", DIFF)

@@ -4,17 +4,22 @@ from __future__ import annotations
 
 import argparse
 import base64
+import itertools
 import json
 import os
 import re
 import secrets
+import shutil
+import subprocess
 import sys
+import tempfile
 import time
 import urllib.error
 import urllib.request
 from collections.abc import Callable
 
 REQUIRED_ENV = ("NEEV_API_KEY", "NEEV_ORG_ID", "NEEV_PROJECT_ID", "NEEV_MODEL_API_KEY")
+REVIEW_ONLY_ENV = ("NEEV_MODEL_API_KEY",)  # a review-only run creates no sandbox
 MODEL_BASE_URL = "https://inference.ai.neevcloud.com/v1"
 DEFAULT_MODEL = "glm-4-7"
 
@@ -33,7 +38,7 @@ REPO_DIR = "/workspace/repo"
 NETWORK_WAIT_S = 60.0
 FETCH_TIMEOUT_MS = 180_000
 TEST_TIMEOUT_MS = 600_000
-REVIEW_BUDGET_S = 180.0
+REVIEW_BUDGET_S = 300.0   # for the whole review; it streams, so a slow model is not cut off by a proxy
 MAX_DIFF_CHARS = 60_000   # larger diffs are cut, and the review says so
 MAX_LOG_CHARS = 4_000     # the end of the test output that goes into the review
 REVIEW_MARKER = "<!-- neev-pr-review -->"  # finds this recipe's own reviews, so a re-run never posts twice
@@ -42,6 +47,7 @@ MAX_COMMENTS = 6           # inline comments per review, most important first
 MAX_COMMENT_CHARS = 1_000  # per comment; a reviewer should take each in at a glance
 MAX_REVIEWS = 3            # reviews per pull request; later pushes are tested but not reviewed
 MAX_PRIOR_CHARS = 6_000    # earlier comments shown to the model so it does not raise them again
+MAX_GUIDE_CHARS = 12_000   # of the repository's conventions file given to the model
 
 REPO_RE = re.compile(r"^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$")
 SHA_RE = re.compile(r"^[0-9a-f]{40}$")
@@ -72,9 +78,9 @@ class ReviewError(Exception):
     """A failure with a one-line message for the reader, such as a pull request that cannot be found."""
 
 
-def missing_env(environ) -> list[str]:
-    """Returns the required variables that are not set."""
-    return [name for name in REQUIRED_ENV if not environ.get(name)]
+def missing_env(environ, review_only: bool = False) -> list[str]:
+    """Returns the required variables that are not set; a review-only run needs only the model key."""
+    return [name for name in (REVIEW_ONLY_ENV if review_only else REQUIRED_ENV) if not environ.get(name)]
 
 
 def pr_from_actions(environ) -> tuple[str, int] | None:
@@ -202,8 +208,16 @@ def wait_for_host(sandbox, host: str, timeout_s: float = NETWORK_WAIT_S, wait=ti
         wait(1.0)
 
 
-def fetch_pull_request(sandbox, repo: str, pr: dict, token: str | None) -> str:
-    """Fetches the base and head commits into the sandbox, checks out the head, and returns the diff."""
+def _diff_args(pr: dict, exclude) -> list[str]:
+    """git diff arguments for the pull request's changes, leaving out files that match the exclude globs."""
+    pathspec = ["--", ".", *(f":(exclude,glob){glob}" for glob in exclude)] if exclude else []
+    return ["diff", "--no-color", "--no-ext-diff", "--no-textconv", f"{pr['base']}...{pr['head']}", *pathspec]
+
+
+def fetch_pull_request(sandbox, repo: str, pr: dict, token: str | None, exclude=()) -> str:
+    """Fetches the base and head commits into the sandbox, checks out the head for the tests, and returns the diff.
+
+    exclude holds globs, such as **/*.gen.go, for files left out of the diff the model reviews."""
     env = git_auth_env(token)
     wait_for_host(sandbox, GIT_HOST)
     sandbox.exec("git", ["init", "-q", REPO_DIR], timeout_ms=FETCH_TIMEOUT_MS)
@@ -212,7 +226,32 @@ def fetch_pull_request(sandbox, repo: str, pr: dict, token: str | None) -> str:
     _git(sandbox, ["fetch", "--progress", "--no-tags", "--filter=blob:none", f"https://{GIT_HOST}/{repo}.git",
                    pr["base"], pr["head"]], env, "fetch")
     _git(sandbox, ["checkout", "--quiet", "--detach", pr["head"]], env, "checkout")
-    return _git(sandbox, ["diff", "--no-color", "--no-ext-diff", f"{pr['base']}...{pr['head']}"], env, "diff").stdout
+    return _git(sandbox, _diff_args(pr, exclude), env, "diff").stdout
+
+
+def local_diff(repo: str, pr: dict, token: str | None, exclude=(), run=subprocess.run) -> str:
+    """Fetches the base and head commits into a temporary directory on this machine and returns the diff.
+
+    For review-only runs, where none of the pull request's code runs: git only reads its objects, and with no
+    checkout no file from the pull request is written to disk. The token rides in the environment, never on disk."""
+    workdir = tempfile.mkdtemp(prefix="pr-review-")
+    env = {**os.environ, **git_auth_env(token)}
+
+    def git(args: list[str], what: str) -> str:
+        """Runs git in the temporary repository; a non-zero exit becomes a ReviewError naming the step."""
+        result = run(["git", "-C", workdir, *args], env=env, capture_output=True, text=True,
+                     timeout=FETCH_TIMEOUT_MS / 1000)
+        if result.returncode != 0:
+            raise ReviewError(f"git {what} failed: {(result.stderr or result.stdout).strip()[-300:]}")
+        return result.stdout
+
+    try:
+        git(["init", "-q"], "init")
+        git(["fetch", "--quiet", "--no-tags", "--filter=blob:none", f"https://{GIT_HOST}/{repo}.git",
+             pr["base"], pr["head"]], "fetch")
+        return git(_diff_args(pr, exclude), "diff")
+    finally:
+        shutil.rmtree(workdir, ignore_errors=True)
 
 
 def close_git_access(sandbox) -> None:
@@ -278,10 +317,21 @@ def prior_note(prior: list[dict]) -> str:
             f"these again, even reworded or on another line:\n{text}")
 
 
-def review_diff(model_client, model: str, title: str, diff: str, prior: list[dict] = ()) -> tuple[str, list[dict], dict]:
+def guide_note(guide: str) -> str:
+    """Adds the repository's conventions to the prompt, so the review also flags clear violations of them."""
+    if not guide.strip():
+        return ""
+    return ("\n\nThis repository's conventions follow. Also flag changed code that clearly breaks one, naming the "
+            f"convention; do not comment on code the diff does not change.\n<conventions>\n{guide[:MAX_GUIDE_CHARS]}"
+            "\n</conventions>")
+
+
+def review_diff(model_client, model: str, title: str, diff: str, prior: list[dict] = (),
+                guide: str = "") -> tuple[str, list[dict], dict]:
     """Asks the model for a review of the numbered diff; returns (summary, comments, commentable lines).
 
-    prior holds earlier comments on the pull request, which the model is told not to raise again."""
+    prior holds earlier comments on the pull request, which the model is told not to raise again; guide is the
+    repository's conventions, which the model checks the changed code against."""
     numbered, commentable = number_diff(diff)
     if not commentable:
         return "The pull request has no changes to review.", [], commentable
@@ -289,12 +339,21 @@ def review_diff(model_client, model: str, title: str, diff: str, prior: list[dic
     if len(numbered) > MAX_DIFF_CHARS:
         numbered = numbered[:MAX_DIFF_CHARS]
         summary_note = f" Only the first {MAX_DIFF_CHARS:,} characters of the diff were reviewed."
-    response = model_client.chat.completions.create(
-        model=model, timeout=REVIEW_BUDGET_S,
-        messages=[{"role": "system", "content": REVIEW_PROMPT},
+    # Streamed: a proxy in front of the model drops a request that sends nothing for two minutes, and a large
+    # diff can take the model longer than that to think about before it writes anything.
+    deadline = time.monotonic() + REVIEW_BUDGET_S
+    stream = model_client.chat.completions.create(
+        model=model, timeout=REVIEW_BUDGET_S, stream=True,
+        messages=[{"role": "system", "content": REVIEW_PROMPT + guide_note(guide)},
                   {"role": "user", "content": f"Pull request title: {title}{prior_note(list(prior))}"
                                               f"\n\n<diff>\n{numbered}\n</diff>"}])
-    summary, comments = _findings(response.choices[0].message.content or "")
+    parts = []
+    for chunk in stream:
+        if time.monotonic() > deadline:
+            raise ReviewError(f"the review took longer than {REVIEW_BUDGET_S:.0f}s")
+        if chunk.choices and chunk.choices[0].delta.content:
+            parts.append(chunk.choices[0].delta.content)
+    summary, comments = _findings("".join(parts))
     return (summary + summary_note).strip(), comments, commentable
 
 
@@ -367,27 +426,34 @@ def _fence(text: str) -> str:
 def review_body(summary: str, unplaced: list[dict], test_cmd: str, exit_code: int, tail: str, last_note: str = "") -> str:
     """Builds the review's body: the test result, a one-line summary, comments that had no diff line, the output,
     and last_note when this is the final review the pull request gets."""
-    status = "Tests passed" if exit_code == 0 else f"Tests failed (exit {exit_code})"
-    parts = [REVIEW_MARKER, f"**{status}** in an isolated NeevCloud sandbox: `{test_cmd}`"]
+    parts = [REVIEW_MARKER]
+    if test_cmd:  # a review-only run has no test result
+        status = "Tests passed" if exit_code == 0 else f"Tests failed (exit {exit_code})"
+        parts.append(f"**{status}** in an isolated NeevCloud sandbox: `{test_cmd}`")
     if summary:
         parts.append(_quiet_mentions(summary))
     if unplaced:
         parts.append("\n".join(f"- `{c['path']}:{c['line']}` {c['body']}" for c in unplaced))
-    fence = _fence(tail)
-    parts.append(f"<details><summary>Test output</summary>\n\n{fence}\n{tail.strip()}\n{fence}\n</details>")
+    if test_cmd:
+        fence = _fence(tail)
+        parts.append(f"<details><summary>Test output</summary>\n\n{fence}\n{tail.strip()}\n{fence}\n</details>")
     if last_note:
         parts.append(f"_{last_note}_")
     return "\n\n".join(parts) + "\n"
 
 
 def run(repo: str, number: int, test_cmd: str, registries: list[str], post: bool, client, model_client,
-        model: str, github: GitHub, log: Log = print, max_reviews: int = MAX_REVIEWS) -> int:
+        model: str, github: GitHub, log: Log = print, max_reviews: int = MAX_REVIEWS, guide: str = "",
+        exclude=()) -> int:
     """Reviews and tests one pull request in a fresh sandbox, posts or prints the review, always deletes it.
 
-    A pull request gets at most max_reviews reviews (0: no limit); after that its pushes are only tested."""
+    A pull request gets at most max_reviews reviews (0: no limit); after that its pushes are only tested.
+    An empty test_cmd reviews only: no sandbox is created, since none of the pull request's code runs, and the
+    diff is taken on this machine. guide and exclude are passed to the review and the diff."""
     sandbox = None
+    steps = itertools.count(1)
     try:
-        log(f"1. Reading {repo}#{number} from GitHub...")
+        log(f"{next(steps)}. Reading {repo}#{number} from GitHub...")
         pr = github.pull_request(number)
         log(f"   \"{pr['title']}\" ({pr['base'][:7]}...{pr['head'][:7]})")
         # Only a run that posts looks at earlier reviews; a dry run always reviews.
@@ -399,45 +465,52 @@ def run(repo: str, number: int, test_cmd: str, registries: list[str], post: bool
             skip = f"the pull request has had its {max_reviews} reviews"
         if history["passes"]:
             log(f"   {history['passes']} earlier review(s), {len(history['prior'])} inline comment(s)")
-        log(f"2. Creating a sandbox (egress allow-list: {', '.join([GIT_HOST, *registries])})...")
-        sandbox = client.sandboxes.create({"name": f"pr-review-{secrets.token_hex(4)}",
-                                           "resources": SANDBOX_RESOURCES, "lifecycle": SANDBOX_LIFECYCLE},
-                                          allow_egress=[GIT_HOST, *registries])
-        sandbox.wait_until_ready(timeout_ms=300_000)
-        log("3. Fetching the pull request into the sandbox...")
-        diff = fetch_pull_request(sandbox, repo, pr, github.token)
         token_note = "; the GitHub token was used for this step only and never stored" if github.token else ""
-        log(f"   {diff.count(chr(10))} diff lines{token_note}")
-        close_git_access(sandbox)
-        log(f"   Removed {GIT_HOST} from the allow-list: the pull request's code can reach only "
-            f"{', '.join(registries) or 'nothing'}")
+        if test_cmd:
+            log(f"{next(steps)}. Creating a sandbox (egress allow-list: {', '.join([GIT_HOST, *registries])})...")
+            sandbox = client.sandboxes.create({"name": f"pr-review-{secrets.token_hex(4)}",
+                                               "resources": SANDBOX_RESOURCES, "lifecycle": SANDBOX_LIFECYCLE},
+                                              allow_egress=[GIT_HOST, *registries])
+            sandbox.wait_until_ready(timeout_ms=300_000)
+            log(f"{next(steps)}. Fetching the pull request into the sandbox...")
+            diff = fetch_pull_request(sandbox, repo, pr, github.token, exclude)
+            log(f"   {diff.count(chr(10))} diff lines{token_note}")
+            close_git_access(sandbox)
+            log(f"   Removed {GIT_HOST} from the allow-list: the pull request's code can reach only "
+                f"{', '.join(registries) or 'nothing'}")
+        else:
+            log(f"{next(steps)}. Fetching the pull request's diff (review only: none of its code runs, so no sandbox)...")
+            diff = local_diff(repo, pr, github.token, exclude)
+            log(f"   {diff.count(chr(10))} diff lines{token_note}")
         placed, unplaced, summary = [], [], ""
         if skip:
-            log(f"4. Not reviewing: {skip}; the tests still run.")
+            log(f"{next(steps)}. Not reviewing: {skip}" + ("; the tests still run." if test_cmd else "."))
         else:
-            log(f"4. Reviewing the diff with {model}...")
+            log(f"{next(steps)}. Reviewing the diff with {model}...")
             started = time.monotonic()
-            summary, comments, commentable = review_diff(model_client, model, pr["title"], diff, history["prior"])
+            summary, comments, commentable = review_diff(model_client, model, pr["title"], diff, history["prior"], guide)
             placed, unplaced = inline_comments(comments, commentable)
             log(f"   Review ready in {time.monotonic() - started:.0f}s: {len(placed)} inline comments"
                 + (f", {len(unplaced)} without a diff line" if unplaced else ""))
-        log(f"5. Running `{test_cmd}` in the sandbox...")
-        exit_code, tail = run_tests(sandbox, test_cmd, log)
-        log(f"   Tests {'passed' if exit_code == 0 else f'failed (exit {exit_code})'}")
+        exit_code, tail = 0, ""
+        if test_cmd:
+            log(f"{next(steps)}. Running `{test_cmd}` in the sandbox...")
+            exit_code, tail = run_tests(sandbox, test_cmd, log)
+            log(f"   Tests {'passed' if exit_code == 0 else f'failed (exit {exit_code})'}")
         pass_number = history["passes"] + 1
         last_note = (f"Review {pass_number} of {max_reviews}: later pushes are tested but not reviewed."
                      if max_reviews and pass_number == max_reviews else "")
         body = review_body(summary, unplaced, test_cmd, exit_code, tail, last_note)
         if skip:
-            log(f"6. Not posting: {skip}.")
+            log(f"{next(steps)}. Not posting: {skip}.")
         elif not post:
-            log("6. The review this run would post:\n")
+            log(f"{next(steps)}. The review this run would post:\n")
             log(body)
             for c in placed:
                 where = f"{c['path']}:{c.get('start_line', c['line'])}" + (f"-{c['line']}" if "start_line" in c else "")
                 log(f"   {where}\n" + "\n".join(f"      {line}" for line in c["body"].split("\n")))
         else:
-            log(f"6. Posted the review: {github.post_review(number, pr['head'], body, placed)}")
+            log(f"{next(steps)}. Posted the review: {github.post_review(number, pr['head'], body, placed)}")
         return 0 if exit_code == 0 else 1
     except KeyboardInterrupt:
         return 130
@@ -458,7 +531,11 @@ def main(argv=None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--repo", help="owner/name of the repository (default: from GitHub Actions, else the demo)")
     parser.add_argument("--pr", type=int, help="pull request number (default: from GitHub Actions, else the demo)")
-    parser.add_argument("--test-cmd", default=DEFAULT_TEST_CMD, help=f"run in the checkout (default: {DEFAULT_TEST_CMD})")
+    parser.add_argument("--test-cmd", default=DEFAULT_TEST_CMD,
+                        help=f"run in the checkout (default: {DEFAULT_TEST_CMD}); an empty string reviews only")
+    parser.add_argument("--exclude", action="append", default=[], metavar="GLOB",
+                        help="leave matching files out of the reviewed diff, repeatable (e.g. '**/*.gen.go')")
+    parser.add_argument("--guide", metavar="FILE", help="your conventions, such as AGENTS.md, for the review to apply")
     parser.add_argument("--allow", action="append", metavar="HOST",
                         help="a host the tests may reach, repeatable (default: registry.npmjs.org)")
     parser.add_argument("--dry-run", action="store_true", help="print the review instead of posting it")
@@ -467,6 +544,13 @@ def main(argv=None) -> int:
     args = parser.parse_args(argv)
     if args.max_reviews < 0:
         parser.error("--max-reviews is 0 (no limit) or more")
+    guide = ""
+    if args.guide:
+        try:
+            with open(args.guide, encoding="utf-8") as handle:
+                guide = handle.read()
+        except OSError as e:
+            parser.error(f"cannot read --guide {args.guide}: {e.strerror}")
 
     from_actions = pr_from_actions(os.environ)
     if args.repo or args.pr:
@@ -483,20 +567,26 @@ def main(argv=None) -> int:
     post = not (args.dry_run or demo)  # the demo is someone else's pull request: print, never post
     token = os.environ.get("GITHUB_TOKEN") or None
 
-    missing = missing_env(os.environ) + (["GITHUB_TOKEN"] if post and not token else [])
+    review_only = not args.test_cmd
+    missing = missing_env(os.environ, review_only) + (["GITHUB_TOKEN"] if post and not token else [])
     if missing:
         print(f"Missing environment variables: {', '.join(missing)}. See README.md.", file=sys.stderr)
         return 2
     if not REPO_RE.match(repo):
         print(f"Not a repository name: {repo!r}; use owner/name.", file=sys.stderr)
         return 2
-    from neevai import NeevAI
     from openai import OpenAI
 
     model_client = OpenAI(base_url=MODEL_BASE_URL, api_key=os.environ["NEEV_MODEL_API_KEY"], max_retries=0)
+    review = lambda client: run(repo, number, args.test_cmd, args.allow or DEFAULT_REGISTRIES, post, client,
+                                model_client, os.environ.get("MODEL", DEFAULT_MODEL), GitHub(repo, token),
+                                max_reviews=args.max_reviews, guide=guide, exclude=args.exclude)
+    if review_only:
+        return review(None)
+    from neevai import NeevAI
+
     with NeevAI() as client:
-        return run(repo, number, args.test_cmd, args.allow or DEFAULT_REGISTRIES, post, client, model_client,
-                   os.environ.get("MODEL", DEFAULT_MODEL), GitHub(repo, token), max_reviews=args.max_reviews)
+        return review(client)
 
 
 if __name__ == "__main__":

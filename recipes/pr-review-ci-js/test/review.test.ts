@@ -1,10 +1,11 @@
 import assert from "node:assert/strict";
-import { mkdtempSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, it } from "node:test";
 import {
-  GitHub, MAX_COMMENTS, MAX_DIFF_CHARS, REPO_DIR, REVIEW_MARKER, fetchPullRequest, gitAuthEnv, inlineComments, main, missingEnv,
+  GitHub, MAX_COMMENTS, MAX_DIFF_CHARS, MAX_GUIDE_CHARS, REPO_DIR, REVIEW_MARKER, fetchPullRequest, gitAuthEnv, guideNote, inlineComments, localDiff, main, missingEnv,
+  type RunGit,
   numberDiff, prFromActions, priorNote, reviewBody, reviewDiff, run, runTests, waitForHost,
 } from "../review.ts";
 import { BASE, DIFF, HEAD, fakeGitHub, fakeModel, fakeNeev, fakeSandbox, type FakeSandbox } from "./fakes.ts";
@@ -26,14 +27,14 @@ function history(...commits: string[]): Record<string, unknown> {
 const noSleep = async () => {};
 
 // runWith runs the recipe against fakes and returns the exit code with everything the fakes recorded.
-async function runWith(o: { sandbox?: FakeSandbox; createError?: Error; model?: ReturnType<typeof fakeModel>; routes?: Record<string, unknown>; post?: boolean; signal?: AbortSignal; maxReviews?: number } = {}) {
+async function runWith(o: { sandbox?: FakeSandbox; createError?: Error; model?: ReturnType<typeof fakeModel>; routes?: Record<string, unknown>; post?: boolean; signal?: AbortSignal; maxReviews?: number; testCmd?: string; localDiff?: () => Promise<string> } = {}) {
   const { neev, created, sandbox } = fakeNeev(o.sandbox ?? fakeSandbox(), o.createError);
   const gh = fakeGitHub(o.routes);
   const lines: string[] = [];
   const code = await run({
-    repo: "o/r", number: 7, testCmd: "npm test", registries: ["registry.npmjs.org"], post: o.post ?? false,
+    repo: "o/r", number: 7, testCmd: o.testCmd ?? "npm test", registries: ["registry.npmjs.org"], post: o.post ?? false,
     neev, modelClient: (o.model ?? fakeModel()).model, model: "glm-4-7", github: new GitHub("o/r", "ghs_token", gh.fetchFn),
-    log: (s) => lines.push(s), signal: o.signal, sleep: noSleep, maxReviews: o.maxReviews,
+    log: (s) => lines.push(s), signal: o.signal, sleep: noSleep, maxReviews: o.maxReviews, localDiff: o.localDiff,
   });
   return { code, created, sandbox, gh, lines };
 }
@@ -75,13 +76,49 @@ describe("fetching into the sandbox", () => {
     const git = sandbox.execs.filter((e) => e.command[0] === "git").map((e) => e.command);
     assert.ok(git.every((c) => !c.join(" ").includes("ghs_secret")));
     assert.deepEqual(git.find((c) => c.includes("fetch"))!.slice(-3), ["https://github.com/o/r.git", BASE, HEAD]);
-    assert.deepEqual(git.find((c) => c.includes("diff"))!.slice(3), ["diff", "--no-color", "--no-ext-diff", `${BASE}...${HEAD}`]);
+    assert.deepEqual(git.find((c) => c.includes("diff"))!.slice(3), ["diff", "--no-color", "--no-ext-diff", "--no-textconv", `${BASE}...${HEAD}`]);
   });
 
   it("success: fetch waits for the network", async () => {
     const sandbox = fakeSandbox({ dnsFailures: 3 });
     await fetchPullRequest(sandbox, "o/r", PR, undefined, { sleep: noSleep });
     assert.equal(sandbox.execs.filter((e) => e.command[0] === "getent").length, 4);
+  });
+
+  it("success: fetch leaves excluded files out of the diff", async () => {
+    const sandbox = fakeSandbox();
+    await fetchPullRequest(sandbox, "o/r", PR, undefined, { sleep: noSleep, exclude: ["**/*.gen.go", "**/mocks/**"] });
+    const diff = sandbox.execs.find((e) => e.command.includes("diff"))!.command;
+    assert.deepEqual(diff.slice(-4), ["--", ".", ":(exclude,glob)**/*.gen.go", ":(exclude,glob)**/mocks/**"]);
+  });
+
+  // fakeGit plays git for localDiff: records each command and its environment, and fails the step named in fail.
+  const fakeGit = (fail?: string) => {
+    const calls: { args: string[]; env: NodeJS.ProcessEnv }[] = [];
+    const run: RunGit = async (args, env) => {
+      calls.push({ args, env });
+      if (fail && args.includes(fail)) return { code: 128, stdout: "", stderr: "fatal: repository not found" };
+      return { code: 0, stdout: args.includes("diff") ? DIFF : "", stderr: "" };
+    };
+    return { calls, run };
+  };
+
+  it("success: localDiff fetches without a checkout and cleans up", async () => {
+    const git = fakeGit();
+    assert.equal(await localDiff("o/r", PR, "ghs_secret", ["**/*.gen.go"], git.run), DIFF);
+    const commands = git.calls.map((c) => c.args.slice(2));
+    assert.deepEqual(commands.map((c) => c[0]), ["init", "fetch", "diff"]);
+    assert.deepEqual(commands[1].slice(-3), ["https://github.com/o/r.git", BASE, HEAD]);
+    assert.equal(commands[2].at(-1), ":(exclude,glob)**/*.gen.go");
+    assert.ok(!existsSync(git.calls[0].args[1]));
+    assert.ok(git.calls.every((c) => !c.args.join(" ").includes("ghs_secret")));
+    assert.equal(git.calls[1].env.GIT_CONFIG_KEY_0, "http.extraHeader");
+  });
+
+  it("failure: localDiff reports git's error and cleans up", async () => {
+    const git = fakeGit("fetch");
+    await assert.rejects(localDiff("o/r", PR, undefined, [], git.run), /git fetch failed: fatal: repository not found/);
+    assert.ok(!existsSync(git.calls[0].args[1]));
   });
 
   it("failure: waitForHost gives up after its budget", async () => {
@@ -203,6 +240,10 @@ describe("the review body", () => {
     assert.ok(body.includes("**Tests failed (exit 1)**") && body.includes("- `a.js:2` b") && body.includes("not ok"));
   });
 
+  it("success: a review-only body has no test result", () => {
+    assert.equal(reviewBody("Adds discounts.", [], "", 0, ""), `${REVIEW_MARKER}\n\nAdds discounts.\n`);
+  });
+
   it("success: quiets mentions and cannot be closed by test output", () => {
     const body = reviewBody("ping @octocat", [], "npm test", 0, "````\nsneaky\n");
     assert.ok(!body.includes("@octocat") && body.includes("`````\n````\nsneaky"));
@@ -278,6 +319,27 @@ describe("GitHub", () => {
     const note = priorNote([{ path: "a.js", line: 4, body: "NaN\nhere.", replies: ["Not reachable."] }]);
     assert.ok(note.includes("Do not raise these again") && note.includes("- a.js:4 NaN here.\n  reply: Not reachable."));
     assert.equal(priorNote([]), "");
+  });
+
+  it("success: review streams the reply", async () => {
+    const { model, calls } = fakeModel();
+    await reviewDiff(model, "m", "t", DIFF);
+    assert.equal(calls[0].stream, true);
+  });
+
+  it("failure: a review that outlasts its budget stops", async (t) => {
+    let now = 0;
+    t.mock.method(Date, "now", () => (now += 200_000));
+    await assert.rejects(reviewDiff(fakeModel().model, "m", "t", DIFF), /took longer than 300s/);
+  });
+
+  it("success: the guide goes into the system prompt", async () => {
+    const { model, calls } = fakeModel();
+    await reviewDiff(model, "m", "t", DIFF, undefined, [], "Wrap errors with %w.");
+    const system = calls[0].messages[0].content;
+    assert.ok(system.includes("<conventions>\nWrap errors with %w.\n</conventions>") && system.includes("naming the convention"));
+    assert.equal(guideNote("  \n"), "");
+    assert.ok(guideNote("x".repeat(50_000)).length < MAX_GUIDE_CHARS + 400);
   });
 
   it("success: review sends earlier comments to the model", async () => {
@@ -357,6 +419,15 @@ describe("the whole run", () => {
     assert.ok(!gh.requests.at(-1)!.body.body.includes("Review 6 of"));
   });
 
+  it("success: a review-only run creates no sandbox", async () => {
+    const { code, created, lines } = await runWith({ testCmd: "", localDiff: async () => DIFF, createError: new Error("a review-only run must not create a sandbox") });
+    assert.equal(code, 0);
+    assert.equal(created.length, 0);
+    assert.ok(lines.includes("2. Fetching the pull request's diff (review only: none of its code runs, so no sandbox)..."));
+    assert.ok(lines.includes("3. Reviewing the diff with glm-4-7...") && lines.includes("4. The review this run would post:\n"));
+    assert.ok(!lines.some((l) => l.includes("Tests passed") || l.includes("Sandbox deleted")));
+  });
+
   it("failure: failing tests fail the run but still review", async () => {
     const { code, sandbox, lines } = await runWith({ sandbox: fakeSandbox({ testEvents: [{ type: "stdout", data: "not ok\n" }, { type: "exit", exitCode: 1 }] }) });
     assert.equal(code, 1);
@@ -401,6 +472,11 @@ describe("the whole run", () => {
 });
 
 describe("main", () => {
+  it("success: a review-only run needs only the model key", () => {
+    assert.deepEqual(missingEnv({ NEEV_MODEL_API_KEY: "m" }, true), []);
+    assert.deepEqual(missingEnv({}, true), ["NEEV_MODEL_API_KEY"]);
+  });
+
   it("failure: names missing variables", async () => {
     assert.equal(await main([], {}), 2);
   });
@@ -416,6 +492,10 @@ describe("main", () => {
 
   it("failure: wants --repo and --pr together", async () => {
     assert.equal(await main(["--repo", "o/r"], FULL_ENV), 2);
+  });
+
+  it("failure: reports an unreadable guide", async () => {
+    assert.equal(await main(["--guide", "/nonexistent/AGENTS.md"], FULL_ENV), 2);
   });
 
   it("failure: rejects a negative review ceiling", async () => {
