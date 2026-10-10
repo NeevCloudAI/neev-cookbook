@@ -3,7 +3,11 @@ import type { ModelLike, NeevLike, SandboxLike } from "../review.ts";
 
 export const BASE = "a".repeat(40);
 export const HEAD = "b".repeat(40);
-export const DIFF = "diff --git a/cart.js b/cart.js\n+export function applyDiscount() {}\n";
+export const DIFF = "diff --git a/cart.js b/cart.js\n--- a/cart.js\n+++ b/cart.js\n@@ -5,2 +5,4 @@\n }\n" +
+  "+export function applyDiscount(total, code) {\n+  return total - Number(code.slice(4));\n }\n";
+// REPLY is the model's reply for DIFF: one comment on the new function's body, with a fix.
+export const REPLY = JSON.stringify({ summary: "Adds discount codes.", comments: [
+  { path: "cart.js", line: 7, body: "This returns NaN for an unknown code.", suggestion: "  return total;" }] });
 
 type Event = { type: "stdout" | "stderr"; data: string } | { type: "exit"; exitCode: number };
 
@@ -75,7 +79,7 @@ export function fakeNeev(sandbox: FakeSandbox = fakeSandbox(), createError?: Err
 }
 
 // fakeModel mimics the OpenAI client: returns a fixed reply, or rejects, and records the request bodies.
-export function fakeModel(reply = "- `cart.js:7` returns NaN for an unknown code", error?: Error) {
+export function fakeModel(reply = REPLY, error?: Error) {
   const calls: Record<string, any>[] = [];
   const model: ModelLike = {
     chat: {

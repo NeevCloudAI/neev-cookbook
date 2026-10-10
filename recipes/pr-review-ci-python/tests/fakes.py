@@ -6,7 +6,11 @@ from types import SimpleNamespace
 
 BASE = "a" * 40
 HEAD = "b" * 40
-DIFF = "diff --git a/cart.js b/cart.js\n+export function applyDiscount() {}\n"
+DIFF = ("diff --git a/cart.js b/cart.js\n--- a/cart.js\n+++ b/cart.js\n@@ -5,2 +5,4 @@\n }\n"
+        "+export function applyDiscount(total, code) {\n+  return total - Number(code.slice(4));\n }\n")
+# The model's reply for DIFF: one comment on the new function's body, with a fix.
+REPLY = ('{"summary": "Adds discount codes.", "comments": [{"path": "cart.js", "line": 7, '
+         '"body": "This returns NaN for an unknown code.", "suggestion": "  return total;"}]}')
 
 
 class FakeSandbox:
@@ -79,7 +83,7 @@ class FakeClient:
 class FakeModel:
     """Mimics the OpenAI client: returns a fixed reply and records the messages it was sent."""
 
-    def __init__(self, reply="- `cart.js:7` returns NaN for an unknown code", error=None):
+    def __init__(self, reply=REPLY, error=None):
         self.calls = []
         self._reply = reply
         self._error = error
