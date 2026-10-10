@@ -93,7 +93,10 @@ class FakeModel:
         self.calls.append(kwargs)
         if self._error:
             raise self._error
-        return SimpleNamespace(choices=[SimpleNamespace(message=SimpleNamespace(content=self._reply))])
+        # Streams the reply in two chunks, plus a chunk with no choices, as real streams sometimes send.
+        half = len(self._reply) // 2
+        return iter([SimpleNamespace(choices=[SimpleNamespace(delta=SimpleNamespace(content=part))])
+                     for part in (self._reply[:half], self._reply[half:])] + [SimpleNamespace(choices=[])])
 
 
 class FakeGitHubAPI:

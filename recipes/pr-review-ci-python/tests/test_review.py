@@ -5,7 +5,7 @@ import pytest
 
 import review
 from review import (
-    REVIEW_MARKER, GitHub, ReviewError, fetch_pull_request, git_auth_env, inline_comments, missing_env,
+    REVIEW_MARKER, GitHub, ReviewError, fetch_pull_request, git_auth_env, guide_note, inline_comments, missing_env,
     number_diff, pr_from_actions, prior_note, review_body, review_diff, run, run_tests, wait_for_host,
 )
 from tests.fakes import BASE, DIFF, HEAD, FakeClient, FakeGitHubAPI, FakeModel, FakeSandbox
@@ -76,6 +76,19 @@ def test_success_fetch_waits_for_the_network(monkeypatch):
     sandbox = FakeSandbox(dns_failures=3)
     fetch_pull_request(sandbox, "o/r", PR, None)
     assert [c for c, _, _ in sandbox.execs].count("getent") == 4
+
+
+def test_success_fetch_leaves_excluded_files_out_of_the_diff():
+    sandbox = FakeSandbox()
+    fetch_pull_request(sandbox, "o/r", PR, None, exclude=["**/*.gen.go", "**/mocks/**"])
+    diff_args = next(args for command, args, _ in sandbox.execs if command == "git" and "diff" in args)
+    assert diff_args[-4:] == ["--", ".", ":(exclude,glob)**/*.gen.go", ":(exclude,glob)**/mocks/**"]
+
+
+def test_success_review_only_fetch_skips_the_checkout():
+    sandbox = FakeSandbox()
+    fetch_pull_request(sandbox, "o/r", PR, None, checkout=False)
+    assert not any("checkout" in args for command, args, _ in sandbox.execs if command == "git")
 
 
 def test_failure_wait_for_host_gives_up_after_its_budget():
@@ -216,6 +229,11 @@ def test_success_review_body_lists_comments_without_a_line_and_failures():
     assert "**Tests failed (exit 1)**" in body and "- `a.js:2` b" in body and "not ok" in body
 
 
+def test_success_review_only_body_has_no_test_result():
+    body = review_body("Adds discounts.", [], "", 0, "")
+    assert body == f"{REVIEW_MARKER}\n\nAdds discounts.\n"
+
+
 def test_success_review_body_quiets_mentions_and_cannot_be_closed_by_output():
     body = review_body("ping @octocat", [], "npm test", 0, "````\nsneaky\n")
     assert "@octocat" not in body and "`````\n````\nsneaky" in body
@@ -306,6 +324,15 @@ def test_success_prior_note_tells_the_model_not_to_repeat():
     assert prior_note([]) == ""
 
 
+def test_success_guide_goes_into_the_system_prompt():
+    model = FakeModel()
+    review_diff(model, "m", "t", DIFF, guide="Wrap errors with %w.")
+    system = model.calls[0]["messages"][0]["content"]
+    assert "<conventions>\nWrap errors with %w.\n</conventions>" in system and "naming the convention" in system
+    assert guide_note("  \n") == ""
+    assert len(guide_note("x" * 50_000)) < review.MAX_GUIDE_CHARS + 400
+
+
 def test_success_review_sends_earlier_comments_to_the_model():
     model = FakeModel()
     review_diff(model, "m", "t", DIFF, [{"path": "a.js", "line": 4, "body": "NaN here.", "replies": []}])
@@ -390,6 +417,15 @@ def test_success_no_limit_keeps_reviewing():
     assert code == 0 and api.requests[-1][0] == "POST" and "Review 6 of" not in api.requests[-1][2]["body"]
 
 
+def test_success_review_only_run_skips_the_tests_and_the_checkout():
+    sandbox = FakeSandbox()
+    code, client, _, lines = _run(sandbox=sandbox, test_cmd="")
+    assert code == 0 and sandbox.stream_calls == [] and client.sandbox.deleted
+    assert "5. No test command: review only." in lines
+    assert not any("checkout" in args for command, args, _ in sandbox.execs if command == "git")
+    assert not any("Tests passed" in line for line in lines)
+
+
 def test_failure_failing_tests_fail_the_run_but_still_review():
     sandbox = FakeSandbox(test_events=[{"type": "stdout", "data": "not ok\n"}, {"type": "exit", "exit_code": 1}])
     code, client, _, lines = _run(sandbox=sandbox)
@@ -471,3 +507,23 @@ def test_failure_main_rejects_a_negative_review_ceiling(monkeypatch):
     with pytest.raises(SystemExit) as exc:
         review.main(["--max-reviews", "-1"])
     assert exc.value.code == 2
+
+
+def test_failure_main_reports_an_unreadable_guide(monkeypatch, capsys):
+    _clear(monkeypatch)
+    with pytest.raises(SystemExit) as exc:
+        review.main(["--guide", "/nonexistent/AGENTS.md"])
+    assert exc.value.code == 2 and "cannot read --guide" in capsys.readouterr().err
+
+
+def test_success_review_streams_the_reply():
+    model = FakeModel()
+    review_diff(model, "m", "t", DIFF)
+    assert model.calls[0]["stream"] is True
+
+
+def test_failure_review_that_outlasts_its_budget_stops(monkeypatch):
+    clock = iter([0.0, review.REVIEW_BUDGET_S + 1] + [review.REVIEW_BUDGET_S + 2] * 10)
+    monkeypatch.setattr(review.time, "monotonic", lambda: next(clock))
+    with pytest.raises(ReviewError, match="took longer than 300s"):
+        review_diff(FakeModel(), "m", "t", DIFF)

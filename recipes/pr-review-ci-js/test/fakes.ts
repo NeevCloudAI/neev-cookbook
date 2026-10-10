@@ -87,7 +87,12 @@ export function fakeModel(reply = REPLY, error?: Error) {
         async create(body) {
           calls.push(body);
           if (error) throw error;
-          return { choices: [{ message: { content: reply } }] };
+          // Streams the reply in two chunks, plus a chunk with no choices, as real streams sometimes send.
+          const half = Math.floor(reply.length / 2);
+          return (async function* () {
+            for (const content of [reply.slice(0, half), reply.slice(half)]) yield { choices: [{ delta: { content } }] };
+            yield { choices: [] };
+          })();
         },
       },
     },

@@ -25,7 +25,7 @@ export const REPO_DIR = "/workspace/repo";
 const NETWORK_WAIT_MS = 60_000;
 const FETCH_TIMEOUT_MS = 180_000;
 const TEST_TIMEOUT_MS = 600_000;
-const REVIEW_BUDGET_MS = 180_000;
+const REVIEW_BUDGET_MS = 300_000; // for the whole review; it streams, so a slow model is not cut off by a proxy
 export const MAX_DIFF_CHARS = 60_000; // larger diffs are cut, and the review says so
 const MAX_LOG_CHARS = 4_000; // the end of the test output that goes into the review
 export const REVIEW_MARKER = "<!-- neev-pr-review -->"; // finds this recipe's own reviews, so a re-run never posts twice
@@ -34,6 +34,7 @@ export const MAX_COMMENTS = 6; // inline comments per review, most important fir
 const MAX_COMMENT_CHARS = 1_000; // per comment; a reviewer should take each in at a glance
 export const MAX_REVIEWS = 3; // reviews per pull request; later pushes are tested but not reviewed
 const MAX_PRIOR_CHARS = 6_000; // earlier comments shown to the model so it does not raise them again
+export const MAX_GUIDE_CHARS = 12_000; // of the repository's conventions file given to the model
 
 const REPO_RE = /^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/;
 const SHA_RE = /^[0-9a-f]{40}$/;
@@ -73,8 +74,9 @@ export interface SandboxLike {
 
 export interface NeevLike { sandboxes: { create(params: Record<string, unknown>): Promise<SandboxLike> } }
 
+// ModelLike is the part of the OpenAI client this script uses: a streamed chat completion.
 export interface ModelLike {
-  chat: { completions: { create(body: Record<string, unknown>, options?: { timeout?: number; signal?: AbortSignal }): Promise<{ choices: { message: { content: string | null } }[] }> } };
+  chat: { completions: { create(body: Record<string, unknown>, options?: { timeout?: number; signal?: AbortSignal }): Promise<AsyncIterable<{ choices: { delta?: { content?: string | null } }[] }>> } };
 }
 
 export interface PullRequest { title: string; base: string; head: string }
@@ -214,17 +216,20 @@ export async function waitForHost(sandbox: SandboxLike, host: string, timeoutMs 
   }
 }
 
-// fetchPullRequest fetches the base and head commits into the sandbox, checks out the head, and returns the diff.
+// fetchPullRequest fetches the base and head commits into the sandbox, checks out the head for the tests, and returns
+// the diff. exclude holds globs, such as **/*.gen.go, for files left out of the diff the model reviews.
 export async function fetchPullRequest(sandbox: SandboxLike, repo: string, pr: PullRequest, token: string | undefined,
-  opts: { sleep?: (ms: number) => Promise<unknown>; signal?: AbortSignal } = {}): Promise<string> {
+  opts: { sleep?: (ms: number) => Promise<unknown>; signal?: AbortSignal; exclude?: string[]; checkout?: boolean } = {}): Promise<string> {
   const env = gitAuthEnv(token);
   await waitForHost(sandbox, GIT_HOST, NETWORK_WAIT_MS, opts.sleep, opts.signal);
   await sandbox.exec(["git", "init", "-q", REPO_DIR], { timeoutMs: FETCH_TIMEOUT_MS, signal: opts.signal });
   // Blobless: full history for the merge base, file contents only for what is checked out or diffed.
   // --progress keeps output flowing, since a command that prints nothing for 60 seconds is stopped.
   await git(sandbox, ["fetch", "--progress", "--no-tags", "--filter=blob:none", `https://${GIT_HOST}/${repo}.git`, pr.base, pr.head], env, "fetch", opts.signal);
-  await git(sandbox, ["checkout", "--quiet", "--detach", pr.head], env, "checkout", opts.signal);
-  return (await git(sandbox, ["diff", "--no-color", "--no-ext-diff", `${pr.base}...${pr.head}`], env, "diff", opts.signal)).stdout;
+  if (opts.checkout ?? true) await git(sandbox, ["checkout", "--quiet", "--detach", pr.head], env, "checkout", opts.signal);
+  const exclude = opts.exclude ?? [];
+  const pathspec = exclude.length ? ["--", ".", ...exclude.map((glob) => `:(exclude,glob)${glob}`)] : [];
+  return (await git(sandbox, ["diff", "--no-color", "--no-ext-diff", `${pr.base}...${pr.head}`, ...pathspec], env, "diff", opts.signal)).stdout;
 }
 
 // closeGitAccess removes GitHub from the sandbox's egress allow-list, so the pull request's code cannot reach it.
@@ -299,10 +304,18 @@ export function priorNote(prior: PriorComment[]): string {
     `these again, even reworded or on another line:\n${lines.join("\n").slice(0, MAX_PRIOR_CHARS)}`;
 }
 
+// guideNote adds the repository's conventions to the prompt, so the review also flags clear violations of them.
+export function guideNote(guide: string): string {
+  if (!guide.trim()) return "";
+  return "\n\nThis repository's conventions follow. Also flag changed code that clearly breaks one, naming the " +
+    `convention; do not comment on code the diff does not change.\n<conventions>\n${guide.slice(0, MAX_GUIDE_CHARS)}\n</conventions>`;
+}
+
 // reviewDiff asks the model for a review of the numbered diff; returns [summary, comments, commentable lines].
-// prior holds earlier comments on the pull request, which the model is told not to raise again.
+// prior holds earlier comments on the pull request, which the model is told not to raise again; guide is the
+// repository's conventions, which the model checks the changed code against.
 export async function reviewDiff(modelClient: ModelLike, model: string, title: string, diff: string, signal?: AbortSignal,
-  prior: PriorComment[] = []): Promise<[string, Finding[], Commentable]> {
+  prior: PriorComment[] = [], guide = ""): Promise<[string, Finding[], Commentable]> {
   let [numbered, commentable] = numberDiff(diff);
   if (!Object.keys(commentable).length) return ["The pull request has no changes to review.", [], commentable];
   let note = "";
@@ -310,12 +323,20 @@ export async function reviewDiff(modelClient: ModelLike, model: string, title: s
     numbered = numbered.slice(0, MAX_DIFF_CHARS);
     note = ` Only the first ${MAX_DIFF_CHARS.toLocaleString("en-US")} characters of the diff were reviewed.`;
   }
-  const response = await modelClient.chat.completions.create({
-    model,
-    messages: [{ role: "system", content: REVIEW_PROMPT },
+  // Streamed: a proxy in front of the model drops a request that sends nothing for two minutes, and a large
+  // diff can take the model longer than that to think about before it writes anything.
+  const deadline = Date.now() + REVIEW_BUDGET_MS;
+  const stream = await modelClient.chat.completions.create({
+    model, stream: true,
+    messages: [{ role: "system", content: REVIEW_PROMPT + guideNote(guide) },
       { role: "user", content: `Pull request title: ${title}${priorNote(prior)}\n\n<diff>\n${numbered}\n</diff>` }],
   }, { timeout: REVIEW_BUDGET_MS, signal });
-  const [summary, comments] = findings(response.choices[0]?.message.content ?? "");
+  let text = "";
+  for await (const chunk of stream) {
+    if (Date.now() > deadline) throw new ReviewError(`the review took longer than ${REVIEW_BUDGET_MS / 1000}s`);
+    text += chunk.choices[0]?.delta?.content ?? "";
+  }
+  const [summary, comments] = findings(text);
   return [(summary + note).trim(), comments, commentable];
 }
 
@@ -388,12 +409,17 @@ function fence(text: string): string {
 // reviewBody builds the review's body: the test result, a one-line summary, comments that had no diff line, the output,
 // and lastNote when this is the final review the pull request gets.
 export function reviewBody(summary: string, unplaced: { path: string; line: number; body: string }[], testCmd: string, exitCode: number, tail: string, lastNote = ""): string {
-  const status = exitCode === 0 ? "Tests passed" : `Tests failed (exit ${exitCode})`;
-  const parts = [REVIEW_MARKER, `**${status}** in an isolated NeevCloud sandbox: \`${testCmd}\``];
+  const parts = [REVIEW_MARKER];
+  if (testCmd) { // a review-only run has no test result
+    const status = exitCode === 0 ? "Tests passed" : `Tests failed (exit ${exitCode})`;
+    parts.push(`**${status}** in an isolated NeevCloud sandbox: \`${testCmd}\``);
+  }
   if (summary) parts.push(quietMentions(summary));
   if (unplaced.length) parts.push(unplaced.map((c) => `- \`${c.path}:${c.line}\` ${c.body}`).join("\n"));
-  const f = fence(tail);
-  parts.push(`<details><summary>Test output</summary>\n\n${f}\n${tail.trim()}\n${f}\n</details>`);
+  if (testCmd) {
+    const f = fence(tail);
+    parts.push(`<details><summary>Test output</summary>\n\n${f}\n${tail.trim()}\n${f}\n</details>`);
+  }
   if (lastNote) parts.push(`_${lastNote}_`);
   return parts.join("\n\n") + "\n";
 }
@@ -403,10 +429,12 @@ export interface RunOptions {
   neev: NeevLike; modelClient: ModelLike; model: string; github: GitHub;
   log?: Log; signal?: AbortSignal; sleep?: (ms: number) => Promise<unknown>;
   maxReviews?: number; // reviews per pull request, then tests only (default MAX_REVIEWS; 0: no limit)
+  guide?: string; // the repository's conventions, for the review to apply
+  exclude?: string[]; // globs of files left out of the reviewed diff
 }
 
 // run reviews and tests one pull request in a fresh sandbox, posts or prints the review, and always deletes the sandbox.
-// A pull request gets at most maxReviews reviews; after that its pushes are only tested.
+// A pull request gets at most maxReviews reviews; after that its pushes are only tested. An empty testCmd reviews only.
 export async function run(o: RunOptions): Promise<number> {
   const { log = console.log, signal, maxReviews = MAX_REVIEWS } = o;
   let sandbox: SandboxLike | undefined;
@@ -427,7 +455,7 @@ export async function run(o: RunOptions): Promise<number> {
     });
     await sandbox.waitUntilReady({ timeoutMs: 300_000 });
     log("3. Fetching the pull request into the sandbox...");
-    const diff = await fetchPullRequest(sandbox, o.repo, pr, o.github.token, { sleep: o.sleep, signal });
+    const diff = await fetchPullRequest(sandbox, o.repo, pr, o.github.token, { sleep: o.sleep, signal, exclude: o.exclude, checkout: Boolean(o.testCmd) });
     const tokenNote = o.github.token ? "; the GitHub token was used for this step only and never stored" : "";
     log(`   ${diff.split("\n").length - 1} diff lines${tokenNote}`);
     await closeGitAccess(sandbox);
@@ -438,15 +466,20 @@ export async function run(o: RunOptions): Promise<number> {
     } else {
       log(`4. Reviewing the diff with ${o.model}...`);
       const started = Date.now();
-      const [s, comments, commentable] = await reviewDiff(o.modelClient, o.model, pr.title, diff, signal, history.prior);
+      const [s, comments, commentable] = await reviewDiff(o.modelClient, o.model, pr.title, diff, signal, history.prior, o.guide);
       summary = s;
       [placed, unplaced] = inlineComments(comments, commentable);
       log(`   Review ready in ${Math.round((Date.now() - started) / 1000)}s: ${placed.length} inline comments` +
         (unplaced.length ? `, ${unplaced.length} without a diff line` : ""));
     }
-    log(`5. Running \`${o.testCmd}\` in the sandbox...`);
-    const [exitCode, tail] = await runTests(sandbox, o.testCmd, log, signal);
-    log(`   Tests ${exitCode === 0 ? "passed" : `failed (exit ${exitCode})`}`);
+    let exitCode = 0, tail = "";
+    if (o.testCmd) {
+      log(`5. Running \`${o.testCmd}\` in the sandbox...`);
+      [exitCode, tail] = await runTests(sandbox, o.testCmd, log, signal);
+      log(`   Tests ${exitCode === 0 ? "passed" : `failed (exit ${exitCode})`}`);
+    } else {
+      log("5. No test command: review only.");
+    }
     const passNumber = history.passes + 1;
     const lastNote = maxReviews && passNumber === maxReviews ? `Review ${passNumber} of ${maxReviews}: later pushes are tested but not reviewed.` : "";
     const body = reviewBody(summary, unplaced, o.testCmd, exitCode, tail, lastNote);
@@ -490,12 +523,19 @@ export async function main(argv: string[], env: Record<string, string | undefine
         repo: { type: "string" }, pr: { type: "string" }, "test-cmd": { type: "string", default: DEFAULT_TEST_CMD },
         allow: { type: "string", multiple: true }, "dry-run": { type: "boolean", default: false },
         "max-reviews": { type: "string", default: String(MAX_REVIEWS) },
+        exclude: { type: "string", multiple: true }, guide: { type: "string" },
       },
     }));
   } catch (e) { console.error((e as Error).message); return 2; }
 
   const maxReviews = Number(values["max-reviews"]);
   if (!Number.isInteger(maxReviews) || maxReviews < 0) { console.error("--max-reviews is 0 (no limit) or more"); return 2; }
+  let guide = "";
+  if (values.guide) {
+    try {
+      guide = readFileSync(values.guide, "utf8");
+    } catch (e) { console.error(`cannot read --guide ${values.guide}: ${(e as Error).message}`); return 2; }
+  }
   let repo: string, number: number;
   const fromActions = prFromActions(env);
   if (values.repo || values.pr) {
@@ -525,7 +565,7 @@ export async function main(argv: string[], env: Record<string, string | undefine
     repo, number, testCmd: values["test-cmd"]!, registries: values.allow ?? DEFAULT_REGISTRIES, post,
     neev: new Neev() as unknown as NeevLike,
     modelClient: new OpenAI({ baseURL: MODEL_BASE_URL, apiKey: env.NEEV_MODEL_API_KEY, maxRetries: 0 }) as unknown as ModelLike,
-    model: env.MODEL ?? DEFAULT_MODEL, github: new GitHub(repo, token), signal: ac.signal, maxReviews,
+    model: env.MODEL ?? DEFAULT_MODEL, github: new GitHub(repo, token), signal: ac.signal, maxReviews, guide, exclude: values.exclude ?? [],
   });
 }
 

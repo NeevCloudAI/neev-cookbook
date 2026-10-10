@@ -29,8 +29,10 @@ export GITHUB_TOKEN=$(gh auth token)
 python review.py --repo your-org/your-repo --pr 42 --dry-run
 ```
 
-- `--test-cmd`: what to run in the checkout (default `npm ci && npm test`), for example `pip install -r requirements.txt && pytest`.
+- `--test-cmd`: what to run in the checkout (default `npm ci && npm test`), for example `pip install -r requirements.txt && pytest`. An empty string (`--test-cmd ""`) reviews only, for a repository whose CI already builds and tests.
 - `--allow`: a host the tests may reach, repeatable (default `registry.npmjs.org`). For Python, pass `--allow pypi.org --allow files.pythonhosted.org`.
+- `--exclude`: a glob of files to leave out of the reviewed diff, repeatable, such as `--exclude '**/*.gen.go' --exclude '**/mocks/**'` for generated code.
+- `--guide`: a file of your team's conventions, such as `AGENTS.md` or `CONTRIBUTING.md`. The review also flags changed code that clearly breaks one. In the workflow, read it from the base branch so a pull request cannot rewrite the rules it is reviewed against.
 - `--max-reviews`: reviews per pull request (default 3, `0` for no limit). After that, pushes are still tested and the check still follows the tests, but no new review is posted.
 - `--dry-run`: print the review instead of posting it. Without it, the script posts, and `GITHUB_TOKEN` must be able to write pull request reviews.
 
@@ -62,7 +64,7 @@ The workflow checks out only `.github/pr-review/`, from the base branch, so the 
 - Pull requests from forks get a read-only `GITHUB_TOKEN` and no repository secrets under `pull_request`, so the job fails at the environment check. Run it on pull requests from branches in your repository, or approve fork runs first.
 - GitHub takes the workflow file itself from the pull request, so anyone who can push a branch can change it. The sandbox protects your runner from the pull request's code, not your repository from its collaborators.
 - GitHub takes inline comments only on lines in the diff. A comment on any other line goes in the review's body, and a suggestion is re-indented to match the line it replaces.
-- Diffs over 60,000 characters are cut, and the review says so.
+- Diffs over 60,000 characters are cut, and the review says so. Leaving generated files out with `--exclude` keeps the budget for code people wrote.
 - The pull request's code is untrusted input to the model too. The prompt tells the model to ignore instructions in the diff, and `@mentions` in the review are neutralised, but treat the review as advice.
 - A test command that prints nothing for 60 seconds is stopped. Most test runners print as they go.
 - Tests that need other hosts, such as a database or `api.github.com`, need `--allow` for each one. Hosts match by exact name, with no wildcards.

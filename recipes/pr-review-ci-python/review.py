@@ -33,7 +33,7 @@ REPO_DIR = "/workspace/repo"
 NETWORK_WAIT_S = 60.0
 FETCH_TIMEOUT_MS = 180_000
 TEST_TIMEOUT_MS = 600_000
-REVIEW_BUDGET_S = 180.0
+REVIEW_BUDGET_S = 300.0   # for the whole review; it streams, so a slow model is not cut off by a proxy
 MAX_DIFF_CHARS = 60_000   # larger diffs are cut, and the review says so
 MAX_LOG_CHARS = 4_000     # the end of the test output that goes into the review
 REVIEW_MARKER = "<!-- neev-pr-review -->"  # finds this recipe's own reviews, so a re-run never posts twice
@@ -42,6 +42,7 @@ MAX_COMMENTS = 6           # inline comments per review, most important first
 MAX_COMMENT_CHARS = 1_000  # per comment; a reviewer should take each in at a glance
 MAX_REVIEWS = 3            # reviews per pull request; later pushes are tested but not reviewed
 MAX_PRIOR_CHARS = 6_000    # earlier comments shown to the model so it does not raise them again
+MAX_GUIDE_CHARS = 12_000   # of the repository's conventions file given to the model
 
 REPO_RE = re.compile(r"^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$")
 SHA_RE = re.compile(r"^[0-9a-f]{40}$")
@@ -202,8 +203,10 @@ def wait_for_host(sandbox, host: str, timeout_s: float = NETWORK_WAIT_S, wait=ti
         wait(1.0)
 
 
-def fetch_pull_request(sandbox, repo: str, pr: dict, token: str | None) -> str:
-    """Fetches the base and head commits into the sandbox, checks out the head, and returns the diff."""
+def fetch_pull_request(sandbox, repo: str, pr: dict, token: str | None, exclude=(), checkout: bool = True) -> str:
+    """Fetches the base and head commits into the sandbox, checks out the head for the tests, and returns the diff.
+
+    exclude holds globs, such as **/*.gen.go, for files left out of the diff the model reviews."""
     env = git_auth_env(token)
     wait_for_host(sandbox, GIT_HOST)
     sandbox.exec("git", ["init", "-q", REPO_DIR], timeout_ms=FETCH_TIMEOUT_MS)
@@ -211,8 +214,11 @@ def fetch_pull_request(sandbox, repo: str, pr: dict, token: str | None) -> str:
     # --progress keeps output flowing, since a command that prints nothing for 60 seconds is stopped.
     _git(sandbox, ["fetch", "--progress", "--no-tags", "--filter=blob:none", f"https://{GIT_HOST}/{repo}.git",
                    pr["base"], pr["head"]], env, "fetch")
-    _git(sandbox, ["checkout", "--quiet", "--detach", pr["head"]], env, "checkout")
-    return _git(sandbox, ["diff", "--no-color", "--no-ext-diff", f"{pr['base']}...{pr['head']}"], env, "diff").stdout
+    if checkout:
+        _git(sandbox, ["checkout", "--quiet", "--detach", pr["head"]], env, "checkout")
+    pathspec = ["--", ".", *(f":(exclude,glob){glob}" for glob in exclude)] if exclude else []
+    return _git(sandbox, ["diff", "--no-color", "--no-ext-diff", f"{pr['base']}...{pr['head']}", *pathspec],
+                env, "diff").stdout
 
 
 def close_git_access(sandbox) -> None:
@@ -278,10 +284,21 @@ def prior_note(prior: list[dict]) -> str:
             f"these again, even reworded or on another line:\n{text}")
 
 
-def review_diff(model_client, model: str, title: str, diff: str, prior: list[dict] = ()) -> tuple[str, list[dict], dict]:
+def guide_note(guide: str) -> str:
+    """Adds the repository's conventions to the prompt, so the review also flags clear violations of them."""
+    if not guide.strip():
+        return ""
+    return ("\n\nThis repository's conventions follow. Also flag changed code that clearly breaks one, naming the "
+            f"convention; do not comment on code the diff does not change.\n<conventions>\n{guide[:MAX_GUIDE_CHARS]}"
+            "\n</conventions>")
+
+
+def review_diff(model_client, model: str, title: str, diff: str, prior: list[dict] = (),
+                guide: str = "") -> tuple[str, list[dict], dict]:
     """Asks the model for a review of the numbered diff; returns (summary, comments, commentable lines).
 
-    prior holds earlier comments on the pull request, which the model is told not to raise again."""
+    prior holds earlier comments on the pull request, which the model is told not to raise again; guide is the
+    repository's conventions, which the model checks the changed code against."""
     numbered, commentable = number_diff(diff)
     if not commentable:
         return "The pull request has no changes to review.", [], commentable
@@ -289,12 +306,21 @@ def review_diff(model_client, model: str, title: str, diff: str, prior: list[dic
     if len(numbered) > MAX_DIFF_CHARS:
         numbered = numbered[:MAX_DIFF_CHARS]
         summary_note = f" Only the first {MAX_DIFF_CHARS:,} characters of the diff were reviewed."
-    response = model_client.chat.completions.create(
-        model=model, timeout=REVIEW_BUDGET_S,
-        messages=[{"role": "system", "content": REVIEW_PROMPT},
+    # Streamed: a proxy in front of the model drops a request that sends nothing for two minutes, and a large
+    # diff can take the model longer than that to think about before it writes anything.
+    deadline = time.monotonic() + REVIEW_BUDGET_S
+    stream = model_client.chat.completions.create(
+        model=model, timeout=REVIEW_BUDGET_S, stream=True,
+        messages=[{"role": "system", "content": REVIEW_PROMPT + guide_note(guide)},
                   {"role": "user", "content": f"Pull request title: {title}{prior_note(list(prior))}"
                                               f"\n\n<diff>\n{numbered}\n</diff>"}])
-    summary, comments = _findings(response.choices[0].message.content or "")
+    parts = []
+    for chunk in stream:
+        if time.monotonic() > deadline:
+            raise ReviewError(f"the review took longer than {REVIEW_BUDGET_S:.0f}s")
+        if chunk.choices and chunk.choices[0].delta.content:
+            parts.append(chunk.choices[0].delta.content)
+    summary, comments = _findings("".join(parts))
     return (summary + summary_note).strip(), comments, commentable
 
 
@@ -367,24 +393,29 @@ def _fence(text: str) -> str:
 def review_body(summary: str, unplaced: list[dict], test_cmd: str, exit_code: int, tail: str, last_note: str = "") -> str:
     """Builds the review's body: the test result, a one-line summary, comments that had no diff line, the output,
     and last_note when this is the final review the pull request gets."""
-    status = "Tests passed" if exit_code == 0 else f"Tests failed (exit {exit_code})"
-    parts = [REVIEW_MARKER, f"**{status}** in an isolated NeevCloud sandbox: `{test_cmd}`"]
+    parts = [REVIEW_MARKER]
+    if test_cmd:  # a review-only run has no test result
+        status = "Tests passed" if exit_code == 0 else f"Tests failed (exit {exit_code})"
+        parts.append(f"**{status}** in an isolated NeevCloud sandbox: `{test_cmd}`")
     if summary:
         parts.append(_quiet_mentions(summary))
     if unplaced:
         parts.append("\n".join(f"- `{c['path']}:{c['line']}` {c['body']}" for c in unplaced))
-    fence = _fence(tail)
-    parts.append(f"<details><summary>Test output</summary>\n\n{fence}\n{tail.strip()}\n{fence}\n</details>")
+    if test_cmd:
+        fence = _fence(tail)
+        parts.append(f"<details><summary>Test output</summary>\n\n{fence}\n{tail.strip()}\n{fence}\n</details>")
     if last_note:
         parts.append(f"_{last_note}_")
     return "\n\n".join(parts) + "\n"
 
 
 def run(repo: str, number: int, test_cmd: str, registries: list[str], post: bool, client, model_client,
-        model: str, github: GitHub, log: Log = print, max_reviews: int = MAX_REVIEWS) -> int:
+        model: str, github: GitHub, log: Log = print, max_reviews: int = MAX_REVIEWS, guide: str = "",
+        exclude=()) -> int:
     """Reviews and tests one pull request in a fresh sandbox, posts or prints the review, always deletes it.
 
-    A pull request gets at most max_reviews reviews (0: no limit); after that its pushes are only tested."""
+    A pull request gets at most max_reviews reviews (0: no limit); after that its pushes are only tested.
+    An empty test_cmd reviews only; guide and exclude are passed to the review and the diff."""
     sandbox = None
     try:
         log(f"1. Reading {repo}#{number} from GitHub...")
@@ -405,7 +436,7 @@ def run(repo: str, number: int, test_cmd: str, registries: list[str], post: bool
                                           allow_egress=[GIT_HOST, *registries])
         sandbox.wait_until_ready(timeout_ms=300_000)
         log("3. Fetching the pull request into the sandbox...")
-        diff = fetch_pull_request(sandbox, repo, pr, github.token)
+        diff = fetch_pull_request(sandbox, repo, pr, github.token, exclude, checkout=bool(test_cmd))
         token_note = "; the GitHub token was used for this step only and never stored" if github.token else ""
         log(f"   {diff.count(chr(10))} diff lines{token_note}")
         close_git_access(sandbox)
@@ -417,13 +448,17 @@ def run(repo: str, number: int, test_cmd: str, registries: list[str], post: bool
         else:
             log(f"4. Reviewing the diff with {model}...")
             started = time.monotonic()
-            summary, comments, commentable = review_diff(model_client, model, pr["title"], diff, history["prior"])
+            summary, comments, commentable = review_diff(model_client, model, pr["title"], diff, history["prior"], guide)
             placed, unplaced = inline_comments(comments, commentable)
             log(f"   Review ready in {time.monotonic() - started:.0f}s: {len(placed)} inline comments"
                 + (f", {len(unplaced)} without a diff line" if unplaced else ""))
-        log(f"5. Running `{test_cmd}` in the sandbox...")
-        exit_code, tail = run_tests(sandbox, test_cmd, log)
-        log(f"   Tests {'passed' if exit_code == 0 else f'failed (exit {exit_code})'}")
+        exit_code, tail = 0, ""
+        if test_cmd:
+            log(f"5. Running `{test_cmd}` in the sandbox...")
+            exit_code, tail = run_tests(sandbox, test_cmd, log)
+            log(f"   Tests {'passed' if exit_code == 0 else f'failed (exit {exit_code})'}")
+        else:
+            log("5. No test command: review only.")
         pass_number = history["passes"] + 1
         last_note = (f"Review {pass_number} of {max_reviews}: later pushes are tested but not reviewed."
                      if max_reviews and pass_number == max_reviews else "")
@@ -458,7 +493,11 @@ def main(argv=None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--repo", help="owner/name of the repository (default: from GitHub Actions, else the demo)")
     parser.add_argument("--pr", type=int, help="pull request number (default: from GitHub Actions, else the demo)")
-    parser.add_argument("--test-cmd", default=DEFAULT_TEST_CMD, help=f"run in the checkout (default: {DEFAULT_TEST_CMD})")
+    parser.add_argument("--test-cmd", default=DEFAULT_TEST_CMD,
+                        help=f"run in the checkout (default: {DEFAULT_TEST_CMD}); an empty string reviews only")
+    parser.add_argument("--exclude", action="append", default=[], metavar="GLOB",
+                        help="leave matching files out of the reviewed diff, repeatable (e.g. '**/*.gen.go')")
+    parser.add_argument("--guide", metavar="FILE", help="your conventions, such as AGENTS.md, for the review to apply")
     parser.add_argument("--allow", action="append", metavar="HOST",
                         help="a host the tests may reach, repeatable (default: registry.npmjs.org)")
     parser.add_argument("--dry-run", action="store_true", help="print the review instead of posting it")
@@ -467,6 +506,13 @@ def main(argv=None) -> int:
     args = parser.parse_args(argv)
     if args.max_reviews < 0:
         parser.error("--max-reviews is 0 (no limit) or more")
+    guide = ""
+    if args.guide:
+        try:
+            with open(args.guide, encoding="utf-8") as handle:
+                guide = handle.read()
+        except OSError as e:
+            parser.error(f"cannot read --guide {args.guide}: {e.strerror}")
 
     from_actions = pr_from_actions(os.environ)
     if args.repo or args.pr:
@@ -496,7 +542,8 @@ def main(argv=None) -> int:
     model_client = OpenAI(base_url=MODEL_BASE_URL, api_key=os.environ["NEEV_MODEL_API_KEY"], max_retries=0)
     with NeevAI() as client:
         return run(repo, number, args.test_cmd, args.allow or DEFAULT_REGISTRIES, post, client, model_client,
-                   os.environ.get("MODEL", DEFAULT_MODEL), GitHub(repo, token), max_reviews=args.max_reviews)
+                   os.environ.get("MODEL", DEFAULT_MODEL), GitHub(repo, token), max_reviews=args.max_reviews,
+                   guide=guide, exclude=args.exclude)
 
 
 if __name__ == "__main__":
