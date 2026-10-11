@@ -13,7 +13,7 @@ export interface SessionLike {
 }
 
 export interface ModelLike {
-  chat: { completions: { create(body: any, options?: { signal?: AbortSignal }): Promise<{ choices: { message: any }[] }> } };
+  chat: { completions: { create(body: any, options?: { signal?: AbortSignal }): Promise<AsyncIterable<any>> } };
 }
 
 type OpenAITool = { type: "function"; function: { name: string; description: string; parameters: unknown } };
@@ -85,6 +85,26 @@ async function outOfBudget(session: SessionLike, reason: string, log: (s: string
   return `${reason}; the app is what the agent wrote so far`;
 }
 
+// collect rebuilds the assistant message from a streamed reply; tool-call arguments arrive in pieces, keyed by index.
+export async function collect(stream: AsyncIterable<any>) {
+  let content = "";
+  const calls = new Map<number, { id: string; type: "function"; function: { name: string; arguments: string } }>();
+  for await (const chunk of stream) {
+    for (const choice of chunk.choices ?? []) {
+      content += choice.delta?.content ?? "";
+      for (const piece of choice.delta?.tool_calls ?? []) {
+        const call = calls.get(piece.index) ?? { id: "", type: "function" as const, function: { name: "", arguments: "" } };
+        call.id = piece.id || call.id;
+        call.function.name = piece.function?.name || call.function.name;
+        call.function.arguments += piece.function?.arguments ?? "";
+        calls.set(piece.index, call);
+      }
+    }
+  }
+  const toolCalls = [...calls.entries()].sort(([a], [b]) => a - b).map(([, c]) => c);
+  return { content: content || null, tool_calls: toolCalls.length ? toolCalls : undefined };
+}
+
 // describe summarises a call's target for the progress log.
 const describe = (args: Record<string, unknown>) =>
   "program" in args ? [args.program, ...((args.args as unknown[]) ?? [])].map(String).join(" ") : String(args.path ?? "");
@@ -105,14 +125,15 @@ export async function buildApp(
     if (signal?.aborted) throw new AgentFailed("stopped");
     const left = deadlineMs - (Date.now() - start);
     if (left <= 0) return outOfBudget(session, timeLimit, log);
-    // The model call gets only what is left of the budget, so one slow reply cannot stretch the run.
+    // Streaming keeps bytes flowing while a long reply is generated, so the connection is not dropped
+    // as idle. The call gets only what is left of the budget, so one slow reply cannot stretch the run.
     const budget = AbortSignal.timeout(left);
     let reply: any;
     try {
-      reply = (await modelClient.chat.completions.create(
-        { model, messages, tools, max_tokens: 8000 },
+      reply = await collect(await modelClient.chat.completions.create(
+        { model, messages, tools, max_tokens: 8000, stream: true },
         { signal: signal ? AbortSignal.any([signal, budget]) : budget },
-      )).choices[0].message;
+      ));
     } catch (e) {
       if (budget.aborted && !signal?.aborted) return outOfBudget(session, timeLimit, log);
       throw e;

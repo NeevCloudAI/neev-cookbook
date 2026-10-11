@@ -12,7 +12,7 @@ Describe a web app in one sentence. An AI agent builds it inside an isolated Nee
 
 ## Run it
 
-You need Node 20.3+, a **Sandboxes** and a **Model API** key ([create a key](https://docs.ai.neevcloud.com/getting-started/create-api-key)), and your [organization and project IDs](https://docs.ai.neevcloud.com/getting-started/org-and-project).
+You need Node 20.3+, a **Sandboxes** and a **Model API** key ([create a key](https://docs.ai.neevcloud.com/getting-started/create-api-key)), and your [organization and project IDs](https://docs.ai.neevcloud.com/getting-started/org-and-project#find-your-organization-id-and-project-id).
 
 ```bash
 npm install
@@ -45,6 +45,7 @@ The app stays online for 10 minutes. Pass `--keep 0` to stop as soon as it is up
 - Every tool call the agent makes is recorded in the sandbox's audit trail under your API key.
 - The server listens on `0.0.0.0` so the preview URL can reach it.
 - The model is `glm-4-7` by default. Set `MODEL` to try another, for example `MODEL=glm-5-2`.
+- Each model reply is streamed, so a long reply keeps the connection active instead of waiting minutes for one response.
 
 ## Time and cost
 
