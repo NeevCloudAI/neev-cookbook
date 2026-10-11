@@ -45,6 +45,7 @@ The app stays online for 10 minutes. Pass `--keep 0` to stop as soon as it is up
 - Every tool call the agent makes is recorded in the sandbox's audit trail under your API key.
 - The server listens on `0.0.0.0` so the preview URL can reach it.
 - The model is `glm-4-7` by default. Set `MODEL` to try another, for example `MODEL=glm-5-2`.
+- Each model reply is streamed, so a long reply keeps the connection active instead of waiting minutes for one response.
 
 ## Time and cost
 

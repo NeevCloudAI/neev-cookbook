@@ -44,9 +44,28 @@ export function fakeModel(replies: Msg[]) {
   const requests: any[] = [];
   const model: ModelLike & { requests: any[] } = {
     requests,
-    chat: { completions: { async create(body: any) { requests.push(structuredClone(body)); return { choices: [{ message: replies.shift()! }] }; } } },
+    chat: { completions: { async create(body: any) {
+      requests.push(structuredClone(body));
+      if (body.stream !== true) throw new Error("expected stream: true");
+      return streamOf(replies.shift()!);
+    } } },
   };
   return model;
+}
+
+// streamOf streams msg as chunks, splitting text and each tool call's arguments in two like a real reply.
+async function* streamOf(msg: Msg) {
+  const chunk = (delta: any) => ({ choices: [{ delta }] });
+  if (msg.content) {
+    const half = Math.floor(msg.content.length / 2);
+    yield chunk({ content: msg.content.slice(0, half) });
+    yield chunk({ content: msg.content.slice(half) });
+  }
+  for (const [index, call] of (msg.tool_calls ?? []).entries()) {
+    const args = call.function.arguments, half = Math.floor(args.length / 2);
+    yield chunk({ tool_calls: [{ index, id: call.id, function: { name: call.function.name, arguments: args.slice(0, half) } }] });
+    yield chunk({ tool_calls: [{ index, function: { arguments: args.slice(half) } }] });
+  }
 }
 
 export const toolCall = (name: string, args: unknown, id = "c1"): Msg => ({
