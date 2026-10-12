@@ -540,6 +540,14 @@ def run(repo: str, number: int, test_cmd: str, registries: list[str], post: bool
                 log(f"   Warning: could not delete sandbox {sandbox.name}: {type(e).__name__}: {e}")
 
 
+def make_client():
+    """Builds the NeevAI client with a timeout that outlasts the longest quiet stretch of the test stream."""
+    from neevai import NeevAI
+
+    # The sandbox runtime stream inherits the client's read timeout (60 s default), so a silent `npm install` would abort it.
+    return NeevAI(timeout_ms=TEST_TIMEOUT_MS + 30_000)
+
+
 def main(argv=None) -> int:
     """Parses arguments, works out which pull request to review, checks the environment, and runs the recipe."""
     parser = argparse.ArgumentParser(description=__doc__)
@@ -597,9 +605,7 @@ def main(argv=None) -> int:
                                 max_reviews=args.max_reviews, guide=guide, exclude=args.exclude)
     if review_only:
         return review(None)
-    from neevai import NeevAI
-
-    with NeevAI() as client:
+    with make_client() as client:
         return review(client)
 
 

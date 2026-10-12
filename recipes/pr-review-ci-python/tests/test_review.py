@@ -580,3 +580,10 @@ def test_failure_review_that_outlasts_its_budget_stops(monkeypatch):
     monkeypatch.setattr(review.time, "monotonic", lambda: next(clock))
     with pytest.raises(ReviewError, match="took longer than 300s"):
         review_diff(FakeModel(), "m", "t", DIFF)
+
+
+def test_success_client_timeout_outlasts_the_test_stream(monkeypatch):
+    seen = {}
+    monkeypatch.setattr("neevai.NeevAI", lambda **kwargs: seen.update(kwargs))
+    review.make_client()
+    assert seen["timeout_ms"] >= review.TEST_TIMEOUT_MS
