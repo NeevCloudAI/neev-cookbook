@@ -1,0 +1,8 @@
+# Put this next to LobeHub's docker-compose.yml. Compose merges it automatically.
+services:
+  lobe:
+    environment:
+      - 'OPENAI_API_KEY=${NEEV_MODEL_API_KEY:?set NEEV_MODEL_API_KEY}'
+      - 'OPENAI_PROXY_URL=https://inference.ai.neevcloud.com/v1'
+      - 'OPENAI_MODEL_LIST=-all,+glm-5-2=GLM 5.2<128000:fc>'
+      - 'DEFAULT_AGENT_CONFIG=model=glm-5-2;provider=openai'
