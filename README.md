@@ -108,6 +108,7 @@ Use NeevCloud sandboxes from the agent framework you already have.
 | [vercel-ai-sdk-js](examples/vercel-ai-sdk-js) | A Vercel AI SDK agent with a sandbox tool |
 | [network-egress-python](examples/network-egress-python) | An egress allow-list: one host reachable, everything else blocked |
 | [playwright-python](examples/playwright-python) | A headless browser in a sandbox, with the screenshot pulled back |
+| [lobehub](examples/lobehub) | A self-hosted LobeHub whose agent runs commands in a NeevCloud sandbox |
 
 ## Connecting
 
