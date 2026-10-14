@@ -85,8 +85,8 @@ same name and they share a filesystem, give them different names and they don't.
 
 ## Notes
 
-**Give each agent only the tools it needs.** The connection publishes 22 tools.
-Loading all of them into every agent costs context and invites wrong tool choices.
+**Give each agent only the tools it needs.** The connection publishes every
+lifecycle and runtime tool the sandbox supports. Loading all of them into every agent costs context and invites wrong tool choices.
 Filter the list from `get_tools()` per agent, as this example does.
 
 **Load tools once.** `get_tools()` performs a round trip. Call it per sandbox at

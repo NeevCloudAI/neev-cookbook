@@ -118,15 +118,16 @@ nothing to install and no bridge process to run:
 https://mcp.sandboxes.as-south-1.ai.neevcloud.com/mcp
 ```
 
-Send your key as a bearer token and name the sandbox you want to work in:
+Listing the tools needs no key, so a client or directory can see what the server offers. Every
+tool call needs one: send your key as a bearer token and name the sandbox you want to work in:
 
 ```
 Authorization: Bearer <NEEV_API_KEY>
 x-sandbox-name: my-agent
 ```
 
-That one connection covers everything: create a sandbox, run commands, read
-and write files, start and manage processes, expose ports, snapshot, and roll back. The sandbox name binds the connection to one machine, so
+That one connection covers everything: create a sandbox, run commands, read,
+write, move and delete files, start, list and manage processes, expose ports, snapshot, and roll back. The sandbox name binds the connection to one machine, so
 giving each agent its own name gives each agent its own isolated environment.
 [MCP setup](https://docs.ai.neevcloud.com/getting-started/mcp/overview) in the docs covers the server and how to
 connect [Cursor](https://docs.ai.neevcloud.com/getting-started/mcp/connect-cursor) and [Codex](https://docs.ai.neevcloud.com/getting-started/mcp/connect-codex).
