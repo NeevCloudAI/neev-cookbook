@@ -7,7 +7,7 @@ Each recipe runs as written: one install, one command, and one or two API keys. 
 ## Prerequisites
 
 - Two NeevCloud API keys, one **Sandboxes** and one **Model API** ([create a key](https://docs.ai.neevcloud.com/getting-started/create-api-key))
-- Your [organization and project IDs](https://docs.ai.neevcloud.com/getting-started/org-and-project)
+- Your [organization and project IDs](https://docs.ai.neevcloud.com/getting-started/org-and-project#find-your-organization-id-and-project-id)
 - Python 3.11+ for Python recipes, or Node 20.3+ for TypeScript recipes
 - Git
 
@@ -104,8 +104,12 @@ Use NeevCloud sandboxes from the agent framework you already have.
 | [langchain-python](examples/langchain-python) | A LangChain agent with sandbox-backed tools |
 | [langgraph-python](examples/langgraph-python) | A two-agent LangGraph crew, a sandbox each, over one MCP URL |
 | [crewai-python](examples/crewai-python) | Replace CrewAI's removed code execution with a sandbox tool |
-| [openai-agents-sdk-python](examples/openai-agents-sdk-python) | An OpenAI Agents SDK agent with a sandbox tool |
-| [vercel-ai-sdk-js](examples/vercel-ai-sdk-js) | A Vercel AI SDK agent with a sandbox tool |
+| [openai-agents-sdk-python](examples/openai-agents-sdk-python) | An OpenAI Agents SDK agent with the sandbox tool contract |
+| [vercel-ai-sdk-js](examples/vercel-ai-sdk-js) | A Vercel AI SDK agent with the sandbox tool contract |
+| [openai-agents-sdk-js](examples/openai-agents-sdk-js) | An OpenAI Agents SDK (JavaScript) agent with the sandbox tool contract |
+| [claude-agent-sdk-python](examples/claude-agent-sdk-python) | A Claude Agent SDK agent whose only tools are sandbox tools |
+| [claude-agent-sdk-js](examples/claude-agent-sdk-js) | The same, in JavaScript |
+| [langgraph-tools-python](examples/langgraph-tools-python) | A LangGraph agent with the sandbox tool contract |
 | [network-egress-python](examples/network-egress-python) | An egress allow-list: one host reachable, everything else blocked |
 | [playwright-python](examples/playwright-python) | A headless browser in a sandbox, with the screenshot pulled back |
 
