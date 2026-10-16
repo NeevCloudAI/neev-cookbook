@@ -4,6 +4,7 @@ from __future__ import annotations
 import asyncio
 import json
 import time
+from types import SimpleNamespace
 
 # The only MCP tools the model is given; lifecycle tools such as delete_sandbox stay with the script.
 AGENT_TOOLS = ("fs_write", "fs_read", "fs_list", "exec")
@@ -92,6 +93,26 @@ async def _out_of_budget(session, reason: str, log) -> str:
     return f"{reason}; the app is what the agent wrote so far"
 
 
+async def _collect(stream) -> SimpleNamespace:
+    """Rebuilds the assistant message from a streamed reply; tool-call arguments arrive in pieces, keyed by index."""
+    content, calls = [], {}
+    async for chunk in stream:
+        for choice in chunk.choices:
+            delta = choice.delta
+            if delta.content:
+                content.append(delta.content)
+            for piece in delta.tool_calls or []:
+                call = calls.setdefault(piece.index, {"id": None, "name": "", "arguments": ""})
+                call["id"] = piece.id or call["id"]
+                if piece.function:
+                    call["name"] = piece.function.name or call["name"]
+                    call["arguments"] += piece.function.arguments or ""
+    tool_calls = [SimpleNamespace(id=c["id"], type="function",
+                                  function=SimpleNamespace(name=c["name"], arguments=c["arguments"]))
+                  for _, c in sorted(calls.items())]
+    return SimpleNamespace(content="".join(content) or None, tool_calls=tool_calls or None)
+
+
 def _describe(args: dict) -> str:
     """Summarises a call's target for the progress log."""
     if "program" in args:
@@ -111,10 +132,17 @@ async def build_app(session, model_client, model: str, request: str, max_steps: 
         left = deadline_s - (time.monotonic() - start)
         if left <= 0:
             return await _out_of_budget(session, f"time limit of {deadline_s:.0f}s reached", log)
+        # Streaming keeps bytes flowing while a long reply is generated, so the connection is not dropped
+        # as idle. The call gets only what is left of the budget, so one slow reply cannot stretch the run.
+        async def ask():
+            stream = await model_client.chat.completions.create(
+                model=model, messages=messages, tools=tools, max_tokens=8000, stream=True)
+            try:
+                return await _collect(stream)
+            finally:
+                await stream.close()  # on a timeout too, so the model stops generating a reply nobody reads
         try:
-            # The model call gets only what is left of the budget, so one slow reply cannot stretch the run.
-            reply = (await asyncio.wait_for(model_client.chat.completions.create(
-                model=model, messages=messages, tools=tools, max_tokens=8000), left)).choices[0].message
+            reply = await asyncio.wait_for(ask(), left)
         except asyncio.TimeoutError:
             return await _out_of_budget(session, f"time limit of {deadline_s:.0f}s reached", log)
         calls = reply.tool_calls or []
