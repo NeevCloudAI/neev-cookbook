@@ -254,7 +254,7 @@ def test_audit_trails_are_reread_until_late_records_stop_arriving():
 
     sb.audit = audit_with_lag
     trails = crew._read_trails({"coder": sb}, sleeps.append)
-    assert [r.tool for r in trails["coder"]] == ["fs.write", "exec", "fs.read"]
+    assert [r.api.operation for r in trails["coder"]] == ["fs.write", "exec", "fs.read"]
     assert len(sleeps) == 3
 
 

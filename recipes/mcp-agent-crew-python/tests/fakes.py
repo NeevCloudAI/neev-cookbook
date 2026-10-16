@@ -78,8 +78,12 @@ class FakeSandbox:
             exists=lambda path: path in sandbox.files_store)
 
     def record(self, tool, target, caller):
-        self.trail.append(SimpleNamespace(at=T0 + timedelta(seconds=len(self.trail)), tool=tool, command=None,
-                                          target=target, outcome=SimpleNamespace(value="success"), caller_source=caller))
+        # Shaped as the API returns it: the path is a file resource, the key is on the actor.
+        when = T0 + timedelta(seconds=len(self.trail))
+        user = SimpleNamespace(type="api_key", uid=caller, credential_uid=caller, name=None)
+        resources = [SimpleNamespace(type="sandbox", name=None), SimpleNamespace(type="file", name=target)]
+        self.trail.append(SimpleNamespace(time=int(when.timestamp() * 1000), api=SimpleNamespace(operation=tool),
+                                          resources=resources, status="Success", actor=SimpleNamespace(user=user)))
 
     def _sdk_read(self, path):
         self.record("fs.read", path, self.caller)
@@ -97,7 +101,7 @@ class FakeSandbox:
         newest_first = list(reversed(self.trail))
         start = int(cursor or 0)
         end = start + self.page_size
-        return SimpleNamespace(records=newest_first[start:end], next_cursor=str(end) if end < len(newest_first) else None)
+        return SimpleNamespace(data=newest_first[start:end], next_cursor=str(end) if end < len(newest_first) else None)
 
     def delete(self):
         self.deleted = True

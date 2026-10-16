@@ -172,7 +172,7 @@ test("it waits for agent records that land late", async () => {
     if (sb.trail.length > Object.keys(PROJECT).length && late > 0) { // the agent's last record is late
       if (q?.cursor === undefined) late--;
       const last = sb.trail.at(-1);
-      page.records = page.records.filter((r) => r !== last);
+      page.data = page.data.filter((r) => r !== last);
     }
     return page;
   };
@@ -190,7 +190,7 @@ test("the setup boundary waits for every upload, not just a count", async () => 
     const page = await realAudit(q);
     if (early > 0) { // the uploads have not landed yet; only the bootstrap records show
       if (q?.cursor === undefined) early--;
-      page.records = page.records.filter((r) => r.command === "bootstrap"); page.next_cursor = undefined;
+      page.data = page.data.filter((r) => r.resources?.some((x) => x.name === "bootstrap")); page.next_cursor = undefined;
     }
     return page;
   };
@@ -204,8 +204,8 @@ test("agent records that never appear still go to review, with a warning", async
   const setup: unknown[] = [];
   sb.audit = async (q) => {
     const page = await realAudit(q);
-    if (!setup.length) setup.push(...page.records); // the setup records are visible; the agent's never arrive
-    page.records = page.records.filter((r) => setup.includes(r)); page.next_cursor = undefined;
+    if (!setup.length) setup.push(...page.data); // the setup records are visible; the agent's never arrive
+    page.data = page.data.filter((r) => setup.includes(r)); page.next_cursor = undefined;
     return page;
   };
   const time = fakeTime();
@@ -259,8 +259,8 @@ test("a failed lookup after an interrupted create names the sandbox", async () =
 
 test("reading the trail stops after the page cap", async () => {
   const calls: (string | undefined)[] = [];
-  const endless = { audit: async (q: { cursor?: string }) => { calls.push(q.cursor); return { records: [], next_cursor: "again", retention_days: 30 }; } };
-  assert.deepEqual(await readTrail(endless, 25, 4), { records: [], retentionDays: 30 });
+  const endless = { audit: async (q: { cursor?: string }) => { calls.push(q.cursor); return { data: [], next_cursor: "again", retention_days: 30 }; } };
+  assert.deepEqual(await readTrail(endless, 25, 4), { events: [], retentionDays: 30 });
   assert.equal(calls.length, 4);
 });
 

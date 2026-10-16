@@ -62,7 +62,7 @@ test("the unified diff marks a missing final newline", () => {
 test("activity keeps only records after the setup boundary, and flags sensitive reads and deletes", () => {
   const sb = new FakeSandbox();
   sb.record("fs.write", { target: ".env" }); // the script's setup upload
-  const boundary = sb.trail.at(-1)!.at;
+  const boundary = sb.trail.at(-1)!.time;
   sb.record("fs.read", { target: ".env" });
   sb.record("fs.read", { target: "home/.ssh/id_ed25519" });
   sb.record("exec", { command: "rm" });

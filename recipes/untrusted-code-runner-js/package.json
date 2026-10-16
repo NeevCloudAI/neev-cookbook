@@ -9,7 +9,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@neevcloud/sdk": "^0.8.2"
+    "@neevcloud/sdk": "^0.9.0"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",

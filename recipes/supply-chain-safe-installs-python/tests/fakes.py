@@ -4,8 +4,14 @@ from types import SimpleNamespace
 
 
 def audit_record(command="pip3", target=None, outcome="success", tool="exec"):
-    """Builds one audit record; outcome exposes .value, as the real SDK's enum does."""
-    return SimpleNamespace(tool=tool, command=command, target=target, outcome=SimpleNamespace(value=outcome))
+    """Builds one audit event in the API's shape: a program is a process resource, a path a file resource."""
+    resources = [SimpleNamespace(type="sandbox", name=None)]
+    if target is not None:
+        resources.append(SimpleNamespace(type="file", name=target))
+    if command is not None:
+        resources.append(SimpleNamespace(type="process", name=command))
+    return SimpleNamespace(api=SimpleNamespace(operation=tool), resources=resources,
+                           status="Success" if outcome == "success" else "Failure")
 
 
 # A phone-home marker that recorded a blocked attempt: the TCP connection to the collector never opened.
@@ -66,7 +72,7 @@ class FakeSandbox:
     def audit(self, from_=None, limit=None, **kwargs):
         self.audit_queries.append(from_)
         page = self._audit_pages[0] if len(self._audit_pages) == 1 else self._audit_pages.pop(0)
-        return SimpleNamespace(records=page, next_cursor=None)
+        return SimpleNamespace(data=page, next_cursor=None)
 
     def delete(self):
         self.deleted = True

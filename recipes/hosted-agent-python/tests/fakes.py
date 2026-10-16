@@ -14,6 +14,19 @@ def event(kind, **part):
     return json.dumps({"type": kind, "timestamp": 1, "part": {"type": kind, **part}}) + "\n"
 
 
+
+def audit_event(i, tool, command, target):
+    """Builds one audit event in the API's shape: a path is a file resource for fs calls, a program a process."""
+    resources = [SimpleNamespace(type="sandbox", name=None)]
+    if target is not None:
+        resources.append(SimpleNamespace(type="file" if tool.startswith("fs.") else "process", name=target))
+    if command is not None:
+        resources.append(SimpleNamespace(type="process", name=command))
+    when = datetime(2026, 1, 1, 7, 0, i % 60, tzinfo=timezone.utc)
+    user = SimpleNamespace(type="api_key", uid=KEY_ID, credential_uid=KEY_ID, name=None)
+    return SimpleNamespace(time=int(when.timestamp() * 1000), api=SimpleNamespace(operation=tool), resources=resources,
+                           status="Success", actor=SimpleNamespace(user=user))
+
 class FakeMachine:
     """The agent's machine: workspace files and supervised processes, the coding CLI among them.
 
@@ -148,13 +161,11 @@ class FakeAgent:
             self.audit_lag -= 1
             last_exec = max(i for i, op in enumerate(ops) if op[0] == "exec")
             ops = ops[:last_exec]
-        records = [SimpleNamespace(at=datetime(2026, 1, 1, 7, 0, i % 60, tzinfo=timezone.utc), tool=t, command=c,
-                                   target=tg, outcome=SimpleNamespace(value="success"), caller_source=KEY_ID)
-                   for i, (t, c, tg) in enumerate(ops)][::-1]
+        records = [audit_event(i, t, c, tg) for i, (t, c, tg) in enumerate(ops)][::-1]
         start = int(cursor or 0)
         page = records[start:start + 2]
         more = start + 2 < len(records)
-        return SimpleNamespace(records=page, next_cursor=str(start + 2) if more else None)
+        return SimpleNamespace(data=page, next_cursor=str(start + 2) if more else None)
 
     def delete(self):
         self.calls.append("delete")

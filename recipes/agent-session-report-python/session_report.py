@@ -10,7 +10,7 @@ import time
 from pathlib import Path
 
 from agent import AgentFailed, run_agent
-from report import make_report, to_markdown, to_terminal
+from report import event_at, make_report, to_markdown, to_terminal
 
 REQUIRED_ENV = ("NEEV_API_KEY", "NEEV_ORG_ID", "NEEV_PROJECT_ID", "NEEV_MODEL_API_KEY")
 MCP_URL = "https://mcp.sandboxes.as-south-1.ai.neevcloud.com/mcp"
@@ -22,7 +22,7 @@ DEFAULT_TASK = (
 )
 PAGE_SIZE = 25
 MAX_PAGES = 100  # a cap on one read, in case the server never stops handing out cursors
-AUDIT_WAIT_S = 30  # records usually appear within a second; this bounds the wait if they are slow
+AUDIT_WAIT_S = 30  # events usually appear within a few seconds; this bounds the wait if they are slow
 AUDIT_POLL_S = 1
 
 # The small project the agent works on. The .env holds obviously fake values and only ever exists in the sandbox.
@@ -91,24 +91,24 @@ async def _agent(connect, sandbox_name: str, model_client, model: str, task: str
 
 
 def read_trail(sandbox) -> tuple[list, int]:
-    """Reads the whole audit trail, following next_cursor page by page; returns records and retention days."""
-    records, cursor = [], None
+    """Reads the whole audit trail, following next_cursor page by page; returns events and retention days."""
+    events, cursor = [], None
     for _ in range(MAX_PAGES):
         page = sandbox.audit(cursor=cursor, limit=PAGE_SIZE)
-        records += page.records
+        events += page.data
         cursor = page.next_cursor
         if not cursor:
             break
-    return records, page.retention_days
+    return events, page.retention_days
 
 
 def wait_for_trail(sandbox, enough, sleep, clock) -> tuple[list, int]:
-    """Re-reads the trail until enough(records) holds or AUDIT_WAIT_S passes; records land a moment after the call."""
+    """Re-reads the trail until enough(events) holds or AUDIT_WAIT_S passes; events land a few seconds after the call."""
     deadline = clock() + AUDIT_WAIT_S
     while True:
-        records, retention = read_trail(sandbox)
-        if enough(records) or clock() >= deadline:
-            return records, retention
+        events, retention = read_trail(sandbox)
+        if enough(events) or clock() >= deadline:
+            return events, retention
         sleep(AUDIT_POLL_S)
 
 
@@ -146,15 +146,15 @@ def run(task: str, out: Path, client, model_client, model: str, connect, log=pri
         if len(setup) < len(PROJECT):
             log(f"The audit trail did not show the setup writes within {AUDIT_WAIT_S}s; try again shortly.")
             return 1
-        # Everything after the newest setup record is the agent's. Both sides are server timestamps.
-        boundary = max(r.at for r in setup)
+        # Everything after the newest setup event is the agent's. Both sides are server timestamps.
+        boundary = max(event_at(e) for e in setup)
         log(f"3. Asking {model} to: {task}")
         session = asyncio.run(_agent(connect, sandbox.name, model_client, model, task, log))
         log(f"4. Agent finished: {session.summary}")
         log("5. Reading the audit trail page by page...")
-        records, retention = wait_for_trail(
-            sandbox, lambda rs: sum(r.at > boundary for r in rs) >= session.calls, sleep, clock)
-        report = make_report(sandbox.name, records, boundary, retention)
+        events, retention = wait_for_trail(
+            sandbox, lambda es: sum(event_at(e) > boundary for e in es) >= session.calls, sleep, clock)
+        report = make_report(sandbox.name, events, boundary, retention)
         if report.agent_actions == 0:
             log(f"The audit trail shows no agent actions after {AUDIT_WAIT_S}s; no report written.")
             return 1

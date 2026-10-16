@@ -11,7 +11,7 @@ def test_read_trail_follows_every_cursor_and_returns_oldest_first():
     oldest = trail([record("fs.write", "a.js", rid="1", at="2026-10-05T15:21:33Z")])
     sb = FakeSandbox("coding-agent-1", pages=[newest, oldest])
     records, truncated = verify.read_trail(sb)
-    assert [r.id for r in records] == ["1", "2", "3"]
+    assert [r.metadata.uid for r in records] == ["1", "2", "3"]
     assert not truncated
     assert [c["cursor"] for c in sb.audit_calls] == [None, "1"]
 
@@ -34,7 +34,7 @@ def test_settled_trail_rereads_until_late_records_stop_arriving():
     reads = iter([first, full, full])
     sb.audit = lambda **kw: next(reads)
     records, _ = verify.settled_trail(sb, sleep=no_sleep)
-    assert [r.id for r in records] == ["1", "2"]
+    assert [r.metadata.uid for r in records] == ["1", "2"]
 
 
 def test_settled_trail_gives_up_after_its_read_limit():
@@ -51,7 +51,7 @@ def test_timeline_shows_time_operation_program_target_outcome_and_credential():
         record("process.start", command="sleep", at="2026-10-05T15:21:34Z", rid="1")])]))
     lines = verify.timeline(records)
     assert "15:21:34" in lines[1] and "process.start" in lines[1] and "sleep" in lines[1] and "success" in lines[1]
-    assert "nope.txt" in lines[2] and "error (not_found)" in lines[2]
+    assert "nope.txt" in lines[2] and "failure (not_found)" in lines[2]
     assert "key-1111" in lines[1]
 
 
@@ -60,7 +60,7 @@ def test_summary_counts_operations_per_credential_and_errors():
         record("exec", rid="3", caller="key-B"), record("fs.read", "x", outcome="error", reason="not_found", rid="2"),
         record("fs.write", "x", rid="1")])]))
     text = "\n".join(verify.summary(records))
-    assert "3 operations" in text and "1 ended in an error" in text
+    assert "3 operations" in text and "1 failed" in text
     assert "key-1111-2222: 2" in text and "key-B: 1" in text
 
 

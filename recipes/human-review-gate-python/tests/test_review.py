@@ -66,7 +66,7 @@ def test_unified_diff_marks_a_missing_final_newline():
 def test_activity_keeps_only_records_after_the_setup_boundary_and_flags_sensitive_reads_and_deletes():
     sb = FakeSandbox()
     sb.record("fs.write", target=".env")  # the script's setup upload
-    boundary = sb.trail[-1].at
+    boundary = review.event_at(sb.trail[-1])
     sb.record("fs.read", target=".env")
     sb.record("fs.read", target="home/.ssh/id_ed25519")
     sb.record("exec", command="rm")

@@ -5,7 +5,7 @@ import uuid
 from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
 
-from neevai import AuditRecord, AuditTrail
+from neevai import AuditEvent, AuditTrail
 
 # Everything the real server lists, so tests can check the model only ever sees the workspace tools.
 SERVER_TOOLS = ("exec", "fs_read", "fs_write", "fs_list", "process_start", "delete_sandbox", "rollback_sandbox", "expose_port")
@@ -21,10 +21,33 @@ def _err(message):
     return SimpleNamespace(is_error=True, structured_content=None, content=[SimpleNamespace(text=message)])
 
 
+def audit_event(at, tool, target=None, command=None, outcome="success", reason="ok", duration_ms=1):
+    """Builds one OCSF audit event the way the API does: a path is a file resource, a program a process."""
+    resources = [{"type": "sandbox", "uid": str(uuid.UUID(int=1))}]
+    if target is not None:
+        resources.append({"type": "file" if tool.startswith("fs.") else "process", "name": target})
+    if command is not None:
+        resources.append({"type": "process", "name": command})
+    failed = outcome != "success"
+    event = {
+        "class_uid": 6003, "class_name": "API Activity", "category_uid": 6, "category_name": "Application Activity",
+        "activity_id": 99, "activity_name": "Other", "type_uid": 600399, "type_name": "API Activity: Other",
+        "time": int(at.timestamp() * 1000), "severity_id": 1, "severity": "Informational",
+        "status_id": 2 if failed else 1, "status": "Failure" if failed else "Success", "status_code": reason,
+        "actor": {"user": {"type": "api_key", "type_id": 99, "uid": CREDENTIAL, "credential_uid": CREDENTIAL}},
+        "api": {"operation": tool}, "resources": resources, "cloud": {"provider": "NeevCloud"},
+        "src_endpoint": {"name": "unknown"}, "osint": [],
+        "metadata": {"version": "1.9.0", "product": {"name": "Sandbox Audit", "vendor_name": "NeevCloud"}, "uid": uuid.uuid4().hex},
+    }
+    if duration_ms is not None:
+        event["duration"] = duration_ms
+    return AuditEvent.model_validate(event)
+
+
 class FakeSandbox:
     """Mimics a sandbox handle: files.write and audit() over one trail, served newest first in pages.
 
-    hidden_polls is how many audit() calls see nothing new, like records still on their way.
+    hidden_polls is how many audit() calls see nothing new, like events still on their way.
     """
 
     def __init__(self, name="session-report-1", hidden_polls=0):
@@ -36,10 +59,10 @@ class FakeSandbox:
         self.files = SimpleNamespace(write=self._write)
 
     def record(self, tool, target=None, command=None, outcome="success", reason="ok", duration_ms=1):
-        """Appends one audit record a second after the previous one."""
-        self.trail.append(AuditRecord(
-            at=T0 + timedelta(seconds=len(self.trail)), id=uuid.uuid4().hex, tool=tool, target=target, command=command,
-            outcome=outcome, reason_code=reason, caller_source=CREDENTIAL, duration_ms=duration_ms))
+        """Appends one audit event a second after the previous one, shaped as the API returns it."""
+        self.trail.append(audit_event(
+            T0 + timedelta(seconds=len(self.trail)), tool, target=target, command=command,
+            outcome=outcome, reason=reason, duration_ms=duration_ms))
 
     def _write(self, path, content):
         self.record("fs.write", target=path)
@@ -62,15 +85,15 @@ class FakeSandbox:
         page = visible[start:start + (limit or 50)]
         more = start + len(page) < len(visible)
         return AuditTrail.model_validate({
-            "sandbox_id": str(uuid.UUID(int=1)), "from": T0.isoformat(), "to": (T0 + timedelta(hours=1)).isoformat(),
-            "retention_days": 30, "window_truncated": False, "records": page,
+            "from": T0.isoformat(), "to": (T0 + timedelta(hours=1)).isoformat(),
+            "retention_days": 30, "window_truncated": False, "data": page,
             "next_cursor": str(start + len(page)) if more else None})
 
 
 class FakeSession:
     """Mimics an MCP session bound to one sandbox; each call that reaches the sandbox lands in its trail.
 
-    Like the real server, an exec record names no program.
+    Like the real server, an exec event names no program.
     """
 
     def __init__(self, sandbox=None, exec_output=""):

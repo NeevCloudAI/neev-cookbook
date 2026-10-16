@@ -7,6 +7,7 @@ import os
 import secrets
 import sys
 import time
+from datetime import datetime, timezone
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -167,7 +168,7 @@ def _verdict(result) -> tuple[bool, str]:
 def _read_trails(sandboxes: dict, sleep, attempts: int = 10) -> dict[str, list]:
     """Reads every sandbox's audit trail, oldest first, following each page.
 
-    Records land a second or two after the call, so it rereads every 3s until two reads in a row agree.
+    Events land a few seconds after the call, so it rereads every 3s until two reads in a row agree.
     """
     previous = None
     for _ in range(attempts):
@@ -176,7 +177,7 @@ def _read_trails(sandboxes: dict, sleep, attempts: int = 10) -> dict[str, list]:
             records, cursor = [], None
             while True:
                 page = sb.audit(cursor=cursor, limit=100)
-                records.extend(page.records)
+                records.extend(page.data)
                 cursor = page.next_cursor
                 if not cursor:
                     break
@@ -189,17 +190,23 @@ def _read_trails(sandboxes: dict, sleep, attempts: int = 10) -> dict[str, list]:
     return trails
 
 
+def _cred(event) -> str | None:
+    """The API key a call was made with, or whoever made it when no key did."""
+    user = event.actor.user
+    return user.credential_uid or user.uid
+
+
 def _credentials(trails: dict, keys: dict, script_key: str) -> dict[str, list[str]]:
     """Maps each credential id in the trails to who used it: the script and/or the agents.
 
     The coder's oldest record is the script's hand-over of PLAN.md, made before the coder connected,
     so it names the script's credential; every other record in an agent's own sandbox is that agent's.
     """
-    script_cred = trails["coder"][0].caller_source if trails.get("coder") else None
+    script_cred = _cred(trails["coder"][0]) if trails.get("coder") else None
     who: dict[str, list[str]] = {script_cred: ["script"]} if script_cred else {}
     for role, (_, key) in keys.items():
         cred = script_cred if key == script_key else next(
-            (r.caller_source for r in trails.get(role, []) if r.caller_source != script_cred), None)
+            (_cred(r) for r in trails.get(role, []) if _cred(r) != script_cred), None)
         if cred:
             who.setdefault(cred, []).append(role)
     return who
@@ -216,10 +223,11 @@ def _print_trails(trails: dict, sandboxes: dict, keys: dict, script_key: str, lo
     for role, records in trails.items():
         log(f"   Audit trail of {sandboxes[role].name}:")
         for r in records:
-            names = who.get(r.caller_source, [])
-            label = names[0] if len(names) == 1 else (r.caller_source or "unknown")[:8]
-            what = r.command or r.target or "-"
-            log(f"     {r.at:%H:%M:%S}  {label:<8}  {r.tool:<9} {what:<20} {r.outcome.value}")
+            names = who.get(_cred(r), [])
+            label = names[0] if len(names) == 1 else (_cred(r) or "unknown")[:8]
+            what = next((x.name for x in reversed(r.resources or []) if x.name), None) or "-"
+            at = datetime.fromtimestamp(r.time / 1000, tz=timezone.utc)
+            log(f"     {at:%H:%M:%S}  {label:<8}  {r.api.operation:<9} {what:<20} {str(r.status).lower()}")
 
 
 def _save(out: Path, suffix: str, files: dict[str, str], log) -> None:

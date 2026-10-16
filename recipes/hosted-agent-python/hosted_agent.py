@@ -9,6 +9,7 @@ import re
 import secrets
 import sys
 import time
+from datetime import datetime, timezone
 from pathlib import Path
 
 REQUIRED_ENV = ("NEEV_API_KEY", "NEEV_ORG_ID", "NEEV_PROJECT_ID", "NEEV_MODEL_API_KEY")
@@ -189,29 +190,37 @@ def verify(machine, original_tests: str, log) -> bool:
 def read_trail(agent, sleep, clock, execs: int) -> list:
     """Reads the agent's whole audit trail, oldest first, waiting up to AUDIT_WAIT_S for the last `execs` to land.
 
-    Records arrive a few seconds after the call, so the wait ends once every exec this script made is there.
+    Events arrive a few seconds after the call, so the wait ends once every exec this script made is there.
     """
     deadline = clock() + AUDIT_WAIT_S
     while True:
-        records, cursor = [], None
+        events, cursor = [], None
         for _ in range(20):  # 20 pages is far more than one run makes
             page = agent.audit(cursor=cursor, limit=100)
-            records += page.records
+            events += page.data
             cursor = page.next_cursor
             if not cursor:
                 break
-        if sum(r.tool == "exec" for r in records) >= execs or clock() >= deadline:
-            return records[::-1]
+        if sum(e.api.operation == "exec" for e in events) >= execs or clock() >= deadline:
+            return events[::-1]
         sleep(POLL_S)
 
 
-def show_trail(records: list, log) -> None:
-    """Prints the trail with repeated polls collapsed, and the API key IDs the calls were made under (masked)."""
-    rows = [(r.at.strftime("%H:%M:%S"), r.tool, r.command or r.target or "", r.outcome.value) for r in records]
+def _what(event) -> str:
+    """The program a call ran, or else the path or process it named; the trail lists these as resources."""
+    names = [r.name for r in event.resources or []
+             if str(getattr(r.type, "value", r.type)) in ("process", "file") and r.name]
+    return names[-1] if names else ""
+
+
+def show_trail(events: list, log) -> None:
+    """Prints the trail with repeated polls collapsed, and the API key IDs the calls were made with (masked)."""
+    rows = [(datetime.fromtimestamp(e.time / 1000, tz=timezone.utc).strftime("%H:%M:%S"), e.api.operation,
+             _what(e), str(e.status).lower()) for e in events]
     for (at, tool, what, outcome), n in collapse(rows):
         log(f"   {at}  {tool:<14} {what[:40]:<40} {outcome}{f'  x{n}' if n > 1 else ''}")
-    keys = sorted({mask_key_id(r.caller_source) for r in records})
-    log(f"   {len(records)} records, made under API key {', '.join(keys)}")
+    keys = sorted({mask_key_id(e.actor.user.credential_uid or e.actor.user.uid) for e in events})
+    log(f"   {len(events)} events, made with API key {', '.join(keys)}")
 
 
 def wait_for_status(agent, status: str, sleep, clock) -> None:

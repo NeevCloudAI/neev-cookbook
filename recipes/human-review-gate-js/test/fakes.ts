@@ -1,6 +1,6 @@
 // test/fakes.ts: in-memory stand-ins for a sandbox with files and an audit trail, its MCP session, and a model client.
 import type { ModelLike, SessionLike } from "../agent.ts";
-import type { AuditRecord, Entry } from "../review.ts";
+import type { AuditEvent, Entry } from "../review.ts";
 
 // Everything the real server lists, so tests can check the model only ever sees the workspace tools.
 const SERVER_TOOLS = ["exec", "fs_read", "fs_write", "fs_list", "process_start", "delete_sandbox", "rollback_sandbox", "expose_port"];
@@ -16,12 +16,12 @@ export const entry = (path: string, type: Entry["type"] = "file", size = 0, syml
   ({ path, name: path.split("/").at(-1)!, type, size, symlinkTarget });
 
 // FakeSandbox mimics a sandbox handle: files over a map, and audit() over one trail served newest first in pages.
-// hiddenPolls is how many audit() calls see nothing new, like records still on their way.
+// hiddenPolls is how many audit() calls see nothing new, like events still on their way.
 export class FakeSandbox {
   id = "0199-fake";
   fs = new Map<string, string | Uint8Array>();
   links = new Map<string, string>();
-  trail: AuditRecord[] = []; // oldest first; audit() reverses it
+  trail: AuditEvent[] = []; // oldest first; audit() reverses it
   deleted = false;
   auditCalls: { cursor?: string; limit?: number }[] = [];
   files = {
@@ -39,10 +39,22 @@ export class FakeSandbox {
 
   constructor(public name = "review-gate-1", public hiddenPolls = 0) {}
 
-  // record appends one audit record a second after the previous one.
+  // record appends one audit event a second after the previous one, shaped as the API returns it:
+  // a path is a file resource for fs calls, a program a process resource, the key is on the actor.
   record(tool: string, r: { target?: string; command?: string; outcome?: "success" | "error"; reason?: string } = {}) {
-    this.trail.push({ at: new Date(T0 + this.trail.length * 1000).toISOString(), id: `r${this.trail.length}`, tool, target: r.target, command: r.command,
-      outcome: r.outcome ?? "success", reason_code: r.reason ?? "ok", caller_source: CREDENTIAL, duration_ms: 1 });
+    const resources: AuditEvent["resources"] = [{ type: "sandbox", uid: "sb" }];
+    if (r.target !== undefined) resources.push({ type: tool.startsWith("fs.") ? "file" : "process", name: r.target });
+    if (r.command !== undefined) resources.push({ type: "process", name: r.command });
+    const failed = (r.outcome ?? "success") !== "success";
+    this.trail.push({
+      class_uid: 6003, class_name: "API Activity", category_uid: 6, category_name: "Application Activity",
+      activity_id: 99, activity_name: "Other", type_uid: 600399, type_name: "API Activity: Other",
+      time: T0 + this.trail.length * 1000, duration: 1, severity_id: 1, severity: "Informational",
+      status_id: failed ? 2 : 1, status: failed ? "Failure" : "Success", status_code: r.reason ?? "ok",
+      actor: { user: { type: "api_key", type_id: 99, uid: CREDENTIAL, credential_uid: CREDENTIAL } },
+      api: { operation: tool }, resources, cloud: { provider: "NeevCloud" }, src_endpoint: { name: "unknown" }, osint: [],
+      metadata: { version: "1.9.0", product: { name: "Sandbox Audit", vendor_name: "NeevCloud" }, uid: `e${this.trail.length}` },
+    });
   }
 
   async waitUntilReady() { return this; }
@@ -55,7 +67,7 @@ export class FakeSandbox {
     const start = Number(q.cursor ?? 0);
     const page = visible.slice(start, start + (q.limit ?? 50));
     const more = start + page.length < visible.length;
-    return { sandbox_id: "sb", from: "", to: "", retention_days: 30, window_truncated: false, records: page,
+    return { from: "", to: "", retention_days: 30, window_truncated: false, data: page,
       next_cursor: more ? String(start + page.length) : undefined };
   }
 }

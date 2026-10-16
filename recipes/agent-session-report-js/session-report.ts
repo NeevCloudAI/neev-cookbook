@@ -5,7 +5,7 @@ import { setTimeout as delay } from "node:timers/promises";
 import { pathToFileURL } from "node:url";
 import { parseArgs } from "node:util";
 import { AgentFailed, runAgent, type ModelLike, type SessionLike } from "./agent.ts";
-import { makeReport, printable, toMarkdown, toTerminal, type AuditRecord } from "./report.ts";
+import { makeReport, operation, printable, target, toMarkdown, toTerminal, type AuditEvent } from "./report.ts";
 
 export const REQUIRED_ENV = ["NEEV_API_KEY", "NEEV_ORG_ID", "NEEV_PROJECT_ID", "NEEV_MODEL_API_KEY"] as const;
 const MCP_URL = "https://mcp.sandboxes.as-south-1.ai.neevcloud.com/mcp";
@@ -16,7 +16,7 @@ const DEFAULT_TASK =
   "which settings it uses, where each one comes from, and whether anything is missing.";
 const PAGE_SIZE = 25;
 const MAX_PAGES = 100; // a cap on one read, in case the server never stops handing out cursors
-export const AUDIT_WAIT_MS = 30_000; // records usually appear within a second; this bounds the wait if they are slow
+export const AUDIT_WAIT_MS = 30_000; // events usually appear within a few seconds; this bounds the wait if they are slow
 const AUDIT_POLL_MS = 1000;
 
 // The small project the agent works on. The .env holds obviously fake values and only ever exists in the sandbox.
@@ -74,30 +74,31 @@ export function missingEnv(env: Record<string, string | undefined>): string[] {
   return REQUIRED_ENV.filter((name) => !env[name]);
 }
 
-type Auditable = { audit(q: { cursor?: string; limit?: number }): Promise<{ records: AuditRecord[]; next_cursor?: string; retention_days: number }> };
+type Auditable = { audit(q: { cursor?: string; limit?: number }): Promise<{ data: AuditEvent[]; next_cursor?: string; retention_days: number }> };
 
 // readTrail reads the whole audit trail, following next_cursor page by page.
-export async function readTrail(sandbox: Auditable, pageSize = PAGE_SIZE, maxPages = MAX_PAGES): Promise<{ records: AuditRecord[]; retentionDays: number }> {
-  const records: AuditRecord[] = [];
+export async function readTrail(sandbox: Auditable, pageSize = PAGE_SIZE, maxPages = MAX_PAGES): Promise<{ events: AuditEvent[]; retentionDays: number }> {
+  const events: AuditEvent[] = [];
   let cursor: string | undefined;
   let retentionDays = 0;
   for (let i = 0; i < maxPages; i++) {
     const page = await sandbox.audit({ cursor, limit: pageSize });
-    records.push(...page.records);
+    events.push(...page.data);
     retentionDays = page.retention_days;
     cursor = page.next_cursor;
     if (!cursor) break;
   }
-  return { records, retentionDays };
+  return { events, retentionDays };
 }
 
-// uploads maps each written path to its earliest fs.write record time, to find where the script's setup ends.
-function uploads(records: AuditRecord[]): Map<string, string> {
-  const times = new Map<string, string>();
-  for (const r of records) {
-    if (r.tool === "fs.write" && r.target) {
-      const seen = times.get(r.target);
-      if (!seen || Date.parse(r.at) < Date.parse(seen)) times.set(r.target, r.at);
+// uploads maps each written path to its earliest fs.write event time, to find where the script's setup ends.
+function uploads(events: AuditEvent[]): Map<string, number> {
+  const times = new Map<string, number>();
+  for (const e of events) {
+    const path = target(e);
+    if (operation(e) === "fs.write" && path) {
+      const seen = times.get(path);
+      if (seen === undefined || e.time < seen) times.set(path, e.time);
     }
   }
   return times;
@@ -115,12 +116,12 @@ export async function run(
   const rawLog = opts.log ?? console.log;
   // Every line passes here, so model or sandbox text cannot drive the terminal; line breaks are kept.
   const log = (text: string) => rawLog(text.split("\n").map(printable).join("\n"));
-  // waitForTrail re-reads the trail until enough(records) holds or AUDIT_WAIT_MS passes; records land a moment after the call.
-  const waitForTrail = async (sandbox: Auditable, enough: (rs: AuditRecord[]) => boolean) => {
+  // waitForTrail re-reads the trail until enough(events) holds or AUDIT_WAIT_MS passes; events land a few seconds after the call.
+  const waitForTrail = async (sandbox: Auditable, enough: (es: AuditEvent[]) => boolean) => {
     const deadline = clock() + AUDIT_WAIT_MS;
     for (;;) {
       const trail = await readTrail(sandbox, pageSize);
-      if (enough(trail.records) || clock() >= deadline) return trail;
+      if (enough(trail.events) || clock() >= deadline) return trail;
       await sleep(AUDIT_POLL_MS);
     }
   };
@@ -135,21 +136,21 @@ export async function run(
     log(`2. Seeding ${paths.length} project files, including a .env with dummy values...`);
     for (const path of paths) await sandbox.files.write(path, PROJECT[path]);
     const setup = await waitForTrail(sandbox, (rs) => paths.every((p) => uploads(rs).has(p)));
-    const uploaded = uploads(setup.records);
+    const uploaded = uploads(setup.events);
     if (!paths.every((p) => uploaded.has(p))) {
       log(`The audit trail did not show the setup writes within ${AUDIT_WAIT_MS / 1000}s; try again shortly.`);
       return 1;
     }
     // Everything after the newest setup write is the agent's. Both sides are server timestamps.
-    const boundary = paths.map((p) => uploaded.get(p)!).reduce((a, b) => (Date.parse(a) > Date.parse(b) ? a : b));
+    const boundary = Math.max(...paths.map((p) => uploaded.get(p)!));
     log(`3. Asking ${model} to: ${task}`);
     const session = await connect(sandbox.name);
     let result: { summary: string; calls: number };
     try { result = await runAgent(session, modelClient, model, task, { log, signal }); } finally { await session.close(); }
     log(`4. Agent finished: ${result.summary}`);
     log("5. Reading the audit trail page by page...");
-    const trail = await waitForTrail(sandbox, (rs) => rs.filter((r) => Date.parse(r.at) > Date.parse(boundary)).length >= result.calls);
-    const report = makeReport(sandbox.name, trail.records, boundary, trail.retentionDays);
+    const trail = await waitForTrail(sandbox, (es) => es.filter((e) => e.time > boundary).length >= result.calls);
+    const report = makeReport(sandbox.name, trail.events, boundary, trail.retentionDays);
     if (report.agentActions === 0) {
       log(`The audit trail shows no agent actions after ${AUDIT_WAIT_MS / 1000}s; no report written.`);
       return 1;

@@ -4,7 +4,7 @@ from __future__ import annotations
 import difflib
 import re
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path, PurePosixPath
 
 MAX_FILE_BYTES = 200_000  # larger files are not shown, so they cannot be approved unseen
@@ -122,43 +122,77 @@ def unified(change: Change) -> str:
 
 
 def _value(v) -> str:
-    """Prints an SDK enum such as Outcome.success as its plain value."""
+    """Prints an SDK enum such as AuditResourceType.file as its plain value."""
     return str(getattr(v, "value", v) or "")
 
 
-def _flag(record) -> str | None:
-    """Names why a record deserves a look: a read of a sensitive path, or a delete."""
-    tool, target = record.tool or "", record.target or ""
-    program = (record.command or "").rsplit("/", 1)[-1]
-    if "remove" in tool or "delete" in tool or program in DELETE_PROGRAMS:
+# Operations whose process resource is the program they ran, not a process they named.
+PROGRAM_OPS = {"exec", "process.start", "pty_command", "ssh"}
+
+
+def event_at(event) -> datetime:
+    """When the event was recorded; the trail gives milliseconds since the epoch."""
+    return datetime.fromtimestamp(event.time / 1000, tz=timezone.utc)
+
+
+def operation(event) -> str:
+    """The call the event records, such as fs.read or exec."""
+    return event.api.operation or ""
+
+
+def _names(event, *kinds: str) -> list[str]:
+    return [r.name for r in event.resources or [] if _value(r.type) in kinds and r.name]
+
+
+def program(event) -> str | None:
+    """The program an exec, process start or terminal command ran, without its arguments."""
+    names = _names(event, "process", "channel") if operation(event) in PROGRAM_OPS else []
+    return names[-1] if names else None
+
+
+def target(event) -> str:
+    """The path the event acted on, or for a process call the process it named."""
+    files = _names(event, "file")
+    if files:
+        return files[0]
+    return "" if operation(event) in PROGRAM_OPS else next(iter(_names(event, "process")), "")
+
+
+def _flag(event) -> str | None:
+    """Names why an event deserves a look: a read of a sensitive path, or a delete."""
+    tool, path = operation(event), target(event)
+    prog = (program(event) or "").rsplit("/", 1)[-1]
+    if "remove" in tool or "delete" in tool or prog in DELETE_PROGRAMS:
         return "delete"
-    if ("read" in tool or "download" in tool) and SENSITIVE.search(target):
+    if ("read" in tool or "download" in tool) and SENSITIVE.search(path):
         return "sensitive read"
     return None
 
 
-def _group(record) -> str:
-    """Labels a record by tool and, for tools that run a program, by that program."""
-    tool = record.tool or "(unnamed)"
-    if record.command:
-        return f"{tool} {record.command}"
+def _group(event) -> str:
+    """Labels an event by operation and, for operations that run a program, by that program."""
+    tool = operation(event) or "(unnamed)"
+    prog = program(event)
+    if prog:
+        return f"{tool} {prog}"
     if tool in ("exec", "process.start"):
         return f"{tool} (program not recorded)"
     return tool
 
 
-def make_activity(records, boundary: datetime | None) -> list[Row]:
-    """Keeps the records after boundary (the script's setup ends there), oldest first."""
-    ordered = sorted((r for r in records if boundary is None or r.at > boundary), key=lambda r: r.at)
-    t0 = ordered[0].at if ordered else None
+def make_activity(events, boundary: datetime | None) -> list[Row]:
+    """Keeps the events after boundary (the script's setup ends there), oldest first."""
+    ordered = sorted((e for e in events if boundary is None or event_at(e) > boundary), key=event_at)
+    t0 = event_at(ordered[0]) if ordered else None
     return [Row(
-        offset_s=(r.at - t0).total_seconds(),
-        tool=printable(r.tool or "(unnamed)"),
-        group=printable(_group(r)),
-        target=printable(r.target or ""),
-        outcome=_value(r.outcome) + (f" ({r.reason_code})" if r.reason_code and r.reason_code != "ok" else ""),
-        credential=(r.caller_source or "-")[:8],  # enough to tell keys apart without printing the full id
-        flag=_flag(r)) for r in ordered]
+        offset_s=(event_at(e) - t0).total_seconds(),
+        tool=printable(operation(e) or "(unnamed)"),
+        group=printable(_group(e)),
+        target=printable(target(e)),
+        outcome=e.status.lower() + (f" ({e.status_code})" if e.status_code and e.status_code != "ok" else ""),
+        # enough of the key, or of the user's id, to tell callers apart without printing the full id
+        credential=(e.actor.user.credential_uid or e.actor.user.uid or "-")[:8],
+        flag=_flag(e)) for e in ordered]
 
 
 def _counts(change: Change) -> str:

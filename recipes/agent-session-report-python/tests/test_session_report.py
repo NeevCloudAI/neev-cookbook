@@ -109,7 +109,7 @@ def test_trail_is_read_page_by_page(tmp_path, monkeypatch):
     assert code == 0  # every page reached the report, not just the last one
     assert md.count("| setup |") == len(session_report.PROJECT) and md.count("| agent |") == 3
     cursors = [c["cursor"] for c in sb.audit_calls]
-    assert any(c is not None for c in cursors)  # more records than one page holds
+    assert any(c is not None for c in cursors)  # more events than one page holds
     assert all(c["limit"] == session_report.PAGE_SIZE for c in sb.audit_calls)
 
 
@@ -136,8 +136,8 @@ def test_agent_records_that_never_appear_fail_after_the_bound(tmp_path):
     def audit(**kw):
         page = real_audit(**kw)
         if not seen_setup:  # the setup records are visible; after that, nothing new ever arrives
-            seen_setup.extend(page.records)
-        page.records = [r for r in page.records if r in seen_setup]
+            seen_setup.extend(page.data)
+        page.data = [r for r in page.data if r in seen_setup]
         page.next_cursor = None
         return page
 
@@ -198,12 +198,12 @@ def test_waits_for_every_agent_call_before_writing_the_report(tmp_path):
     def audit(**kw):
         page = real_audit(**kw)
         if state["setup"] is None:
-            state["setup"] = list(page.records)
+            state["setup"] = list(page.data)
         elif len(sb.trail) > len(state["setup"]) and state["late_polls"] > 0:
             # the agent's last call lands a few polls late
             if kw.get("cursor") is None:
                 state["late_polls"] -= 1
-            page.records = [r for r in page.records if r is not sb.trail[-1]]
+            page.data = [r for r in page.data if r is not sb.trail[-1]]
         return page
 
     sb.audit = audit
@@ -247,7 +247,7 @@ def test_reading_the_trail_stops_after_max_pages(monkeypatch):
     class Endless:
         def audit(self, cursor=None, limit=None):
             calls.append(cursor)
-            return SimpleNamespace(records=[], next_cursor="again", retention_days=30)
+            return SimpleNamespace(data=[], next_cursor="again", retention_days=30)
 
     monkeypatch.setattr(session_report, "MAX_PAGES", 4)
     assert session_report.read_trail(Endless()) == ([], 30)

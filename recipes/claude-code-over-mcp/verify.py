@@ -6,10 +6,13 @@ import os
 import sys
 import time
 from collections import Counter
+from datetime import datetime, timezone
 
 REQUIRED_ENV = ("NEEV_API_KEY", "NEEV_ORG_ID", "NEEV_PROJECT_ID")
 PAGE_SIZE = 100
 COLUMNS = "{:<8}  {:<14}  {:<10}  {:<30}  {:<22}  {:>7}  {}"
+# Operations whose process resource is the program they ran, not a process they named.
+PROGRAM_OPS = {"exec", "process.start", "pty_command", "ssh"}
 
 
 def missing_env(environ, required=REQUIRED_ENV) -> list[str]:
@@ -18,30 +21,30 @@ def missing_env(environ, required=REQUIRED_ENV) -> list[str]:
 
 
 def read_trail(sandbox) -> tuple[list, bool]:
-    """Reads every page of the sandbox's trail since it was created; returns records oldest first and the truncation flag."""
-    records, cursor, truncated = [], None, False
+    """Reads every page of the sandbox's trail since it was created; returns events oldest first and the truncation flag."""
+    events, cursor, truncated = [], None, False
     # Without from_ the API returns only the last 24 hours; the sandbox's creation time covers its whole life.
     since = sandbox.data.get("created_at")
     while True:
         page = sandbox.audit(from_=since, cursor=cursor, limit=PAGE_SIZE)
-        records.extend(page.records)
+        events.extend(page.data)
         truncated = truncated or page.window_truncated
         cursor = page.next_cursor
         if not cursor:
-            return records[::-1], truncated  # pages run newest first
+            return events[::-1], truncated  # pages run newest first
 
 
 def settled_trail(sandbox, sleep=time.sleep, interval: float = 5, max_reads: int = 8) -> tuple[list, bool]:
-    """Re-reads the trail until two reads in a row agree, since records land a few seconds after the work."""
+    """Re-reads the trail until two reads in a row agree, since events land a few seconds after the work."""
     sleep(interval)  # the last operation may not have landed yet
-    records, truncated = read_trail(sandbox)
+    events, truncated = read_trail(sandbox)
     for _ in range(max_reads - 1):
         sleep(interval)
         again, truncated = read_trail(sandbox)
-        if len(again) == len(records):
+        if len(again) == len(events):
             return again, truncated
-        records = again
-    return records, truncated
+        events = again
+    return events, truncated
 
 
 def _clip(text: str, width: int) -> str:
@@ -49,24 +52,55 @@ def _clip(text: str, width: int) -> str:
     return text if len(text) <= width else text[: width - 3] + "..."
 
 
-def timeline(records) -> list[str]:
-    """Renders records as one aligned line each: time, operation, program, target, outcome, duration, credential."""
-    lines = [COLUMNS.format("UTC", "operation", "program", "target", "outcome", "took", "credential")]
-    for r in records:
-        outcome = r.outcome.value if r.reason_code in (None, "ok") else f"{r.outcome.value} ({r.reason_code})"
-        took = "" if r.duration_ms is None else f"{r.duration_ms}ms"
+def operation(event) -> str:
+    """The call the event records, such as fs.read or exec."""
+    return event.api.operation or ""
+
+
+def _names(event, *kinds: str) -> list[str]:
+    return [r.name for r in event.resources or [] if getattr(r.type, "value", r.type) in kinds and r.name]
+
+
+def program(event) -> str:
+    """The program an exec, process start or terminal command ran, without its arguments."""
+    names = _names(event, "process", "channel") if operation(event) in PROGRAM_OPS else []
+    return names[-1] if names else ""
+
+
+def target(event) -> str:
+    """The path the event acted on, or for a process call the process it named."""
+    files = _names(event, "file")
+    if files:
+        return files[0]
+    return "" if operation(event) in PROGRAM_OPS else next(iter(_names(event, "process")), "")
+
+
+def caller(event) -> str:
+    """Who made the call: the API key it was made with, or the user or platform that made it."""
+    user = event.actor.user
+    return user.credential_uid or user.uid or "unknown"
+
+
+def timeline(events) -> list[str]:
+    """Renders events as one aligned line each: time, operation, program, target, outcome, duration, caller."""
+    lines = [COLUMNS.format("UTC", "operation", "program", "target", "outcome", "took", "by")]
+    for e in events:
+        status = e.status.lower()
+        outcome = status if e.status_code in (None, "ok") else f"{status} ({e.status_code})"
+        took = "" if e.duration is None else f"{e.duration}ms"
+        at = datetime.fromtimestamp(e.time / 1000, tz=timezone.utc)
         lines.append(COLUMNS.format(
-            r.at.strftime("%H:%M:%S"), r.tool or "-", _clip(r.command or "-", 10), _clip(r.target or "-", 30),
-            outcome, took, (r.caller_source or "-")[:8]))
+            at.strftime("%H:%M:%S"), operation(e) or "-", _clip(program(e) or "-", 10), _clip(target(e) or "-", 30),
+            outcome, took, caller(e)[:8]))
     return lines
 
 
-def summary(records) -> list[str]:
-    """Totals the trail: operation and error counts, then how many operations each credential made."""
-    errors = sum(1 for r in records if r.outcome.value != "success")
-    lines = [f"{len(records)} operations, {errors} ended in an error. Operations per credential:"]
-    for caller, count in Counter(r.caller_source or "unknown" for r in records).most_common():
-        lines.append(f"  {caller}: {count}")
+def summary(events) -> list[str]:
+    """Totals the trail: operation and failure counts, then how many operations each caller made."""
+    failures = sum(1 for e in events if e.status != "Success")
+    lines = [f"{len(events)} operations, {failures} failed. Operations per caller (API key or user):"]
+    for who, count in Counter(caller(e) for e in events).most_common():
+        lines.append(f"  {who}: {count}")
     return lines
 
 
@@ -79,11 +113,11 @@ def report(client, name: str, log=print, sleep=time.sleep) -> int:
     except NotFoundError:
         log(f"No sandbox named {name} in this project. Run this before the sandbox is deleted.")
         return 1
-    records, truncated = settled_trail(sandbox, sleep=sleep)
-    if not records:
+    events, truncated = settled_trail(sandbox, sleep=sleep)
+    if not events:
         log(f"No operations recorded in {name} yet.")
         return 1
-    for line in timeline(records) + [""] + summary(records):
+    for line in timeline(events) + [""] + summary(events):
         log(line)
     if truncated:
         log("The sandbox is older than the trail's retention, so its earliest operations are not shown.")
