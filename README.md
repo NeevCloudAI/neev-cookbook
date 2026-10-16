@@ -56,6 +56,7 @@ In about a minute you get a public URL to an app an agent built inside a sandbox
 | **MCP agent with an undo button** | The agent snapshots before a risky migration, sees its tests fail and rolls itself back | [Python](recipes/mcp-agent-undo-python) |  |
 | **Quarantine an untrusted MCP server** | Run a third-party MCP server with no internet and see what it tries to read, send and start | [Python](recipes/quarantine-mcp-server-python) |  |
 | **Hosted coding agent** | Run OpenCode as a hosted agent on NeevCloud models, check its fix, pause and resume it | [Python](recipes/hosted-agent-python) |  |
+| **Run your tests in a sandbox with crabbox** | Tests green on your Mac but red in CI? `crabbox run` sends your uncommitted checkout to a fresh Linux sandbox and shows you the Linux result in about 20 seconds, before you push | [Guide and config](recipes/crabbox-remote-tests) |  |
 
 ### Audit and review
 
