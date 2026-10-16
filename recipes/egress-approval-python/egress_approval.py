@@ -162,10 +162,11 @@ class EgressGate:
 
 def exec_records(sandbox, since: str, expected: int, attempts: int = AUDIT_POLL_ATTEMPTS,
                  interval_s: float = AUDIT_POLL_INTERVAL_S, sleep=time.sleep, log=print) -> list:
-    """Polls the audit trail from `since` until `expected` exec records appear; returns them oldest first."""
+    """Polls the audit trail from `since` until `expected` exec events appear; returns them oldest first."""
     records = []
     for attempt in range(attempts):
-        records = [r for r in sandbox.audit(from_=since, limit=100).records if r.tool == "exec"]
+        page = sandbox.audit(from_=since, operation="exec", limit=100)
+        records = [e for e in page.data if e.api.operation == "exec"]
         if len(records) >= expected:
             break
         if attempt < attempts - 1:
@@ -175,14 +176,26 @@ def exec_records(sandbox, since: str, expected: int, attempts: int = AUDIT_POLL_
     return list(reversed(records))
 
 
-def _outcome(record) -> str:
-    """Reads an audit record's outcome as a plain string, whether it is an enum or already text."""
-    return getattr(record.outcome, "value", str(record.outcome))
+def _outcome(event) -> str:
+    """An audit event's outcome as a plain word: success or failure."""
+    return str(event.status).lower()
 
 
-def _clock_time(at) -> str:
-    """Formats an audit timestamp as HH:MM:SS UTC."""
-    return at.strftime("%H:%M:%S") if hasattr(at, "strftime") else str(at)[11:19]
+def program(event) -> str | None:
+    """The program an exec event ran, without its arguments; the trail names it in a process resource."""
+    names = [r.name for r in event.resources or [] if str(getattr(r.type, "value", r.type)) == "process" and r.name]
+    return names[-1] if names else None
+
+
+def _key(event) -> str | None:
+    """The API key the call was made with, or whoever made it when no key did."""
+    user = event.actor.user
+    return user.credential_uid or user.uid
+
+
+def _clock_time(ms: int) -> str:
+    """Formats an audit event's time, milliseconds since the epoch, as HH:MM:SS UTC."""
+    return datetime.fromtimestamp(ms / 1000, tz=timezone.utc).strftime("%H:%M:%S")
 
 
 def _find(client, name: str):
@@ -244,7 +257,7 @@ def run(request: str, client, model_client, model: str, connect, auto_approve: s
         log("5. Audit trail of the commands run (UTC time, program, outcome, key; arguments are never recorded):")
         expected = len(agent.exec_commands) + gate.probes + len(unapproved)
         for r in exec_records(sandbox, since, expected, sleep=sleep, log=log):
-            log(f"   {_clock_time(r.at)} {r.command or '(program not recorded)'} -> {_outcome(r)}  key {mask_id(r.caller_source)}")
+            log(f"   {_clock_time(r.time)} {program(r) or '(program not recorded)'} -> {_outcome(r)}  key {mask_id(_key(r))}")
         checks = [("the agent finished its task", agent.finished),
                   ("at least one host was approved", bool(gate.approved))]
         if gate.approved:  # the first approval opens an empty list, so its before/after is the live-change proof

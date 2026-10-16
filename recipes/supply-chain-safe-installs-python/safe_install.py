@@ -160,9 +160,15 @@ def legit_install_ok(install_result) -> bool:
     return install_result.exit_code == 0
 
 
-def _outcome(record) -> str:
-    """Reads an audit record's outcome as a plain string, whether it is an enum or already text."""
-    return getattr(record.outcome, "value", str(record.outcome))
+def _outcome(event) -> str:
+    """An audit event's outcome as a plain word: success or failure."""
+    return str(event.status).lower()
+
+
+def program(event) -> str | None:
+    """The program an exec event ran, without its arguments; the trail names it in a process resource."""
+    names = [r.name for r in event.resources or [] if str(getattr(r.type, "value", r.type)) == "process" and r.name]
+    return names[-1] if names else None
 
 
 def _pipish(command) -> bool:
@@ -175,8 +181,8 @@ def pip_records(sandbox, since: str, expected: int = 2, attempts: int = AUDIT_PO
     """Polls the audit trail from `since` until `expected` pip runs appear; returns what it has when the poll ends."""
     records = []
     for attempt in range(attempts):
-        records = [r for r in sandbox.audit(from_=since, limit=100).records
-                   if r.tool == "exec" and _pipish(r.command)]
+        page = sandbox.audit(from_=since, operation="exec", limit=100)
+        records = [e for e in page.data if e.api.operation == "exec" and _pipish(program(e))]
         if len(records) >= expected:
             return records
         if attempt < attempts - 1:
@@ -215,7 +221,7 @@ def run(package: str, client, log=print, wait=time.sleep) -> int:
         legit_ok = legit_install_ok(legit)
         log("5. Audit trail of the pip runs (program, target, outcome; arguments are never recorded):")
         for record in pip_records(sandbox, since, wait=wait, log=log):
-            log(f"   {record.command} {record.target or '-'} -> {_outcome(record)}")
+            log(f"   {program(record)} -> {_outcome(record)}")
         if not (blocked and legit_ok):
             log("The boundary did not hold as expected "
                 f"(phone-home blocked: {blocked}, legitimate install ok: {legit_ok}).")

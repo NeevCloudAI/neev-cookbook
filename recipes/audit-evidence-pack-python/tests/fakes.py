@@ -4,7 +4,7 @@ import uuid
 from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
 
-from neevai import AuditRecord, AuditTrail, NotFoundError
+from neevai import AuditEvent, AuditTrail, NotFoundError
 
 T0 = datetime(2026, 10, 5, 12, 0, tzinfo=timezone.utc)
 CRED_A = "c0de0001-0000-7000-8000-00000000000a"
@@ -12,10 +12,32 @@ CRED_B = "01b20d7f-0000-7000-8000-00000000000b"
 DEMO_T = T0 + timedelta(minutes=8)  # inside the window a demo run at T0+10min exports
 
 
-def record(n, tool, target=None, command=None, outcome="success", reason="ok", cred=CRED_A, at=None, **kw):
-    """Builds a real SDK AuditRecord, so the tests read the same fields the server returns."""
-    return AuditRecord(at=at or T0 + timedelta(seconds=n), id=f"rec-{n}", tool=tool, target=target, command=command,
-                       outcome=outcome, reason_code=reason, caller_source=cred, request_id=f"req-{n}", **kw)
+def record(n, tool, target=None, command=None, outcome="success", reason="ok", cred=CRED_A, at=None, sandbox="", **kw):
+    """Builds a real SDK AuditEvent shaped as the API returns it, so the tests read the same fields the server sends.
+
+    A path is a file resource for fs operations and a process resource otherwise; a program is a process resource.
+    """
+    resources = [{"type": "sandbox", "uid": sandbox}]
+    if target is not None:
+        resources.append({"type": "file" if tool.startswith("fs.") else "process", "name": target})
+    if command is not None:
+        resources.append({"type": "process", "name": command})
+    failed = outcome != "success"
+    at = at or T0 + timedelta(seconds=n)
+    return AuditEvent.model_validate({
+        "class_uid": 6003, "class_name": "API Activity", "category_uid": 6, "category_name": "Application Activity",
+        "activity_id": 99, "activity_name": "Other", "type_uid": 600399, "type_name": "API Activity: Other",
+        "time": int(at.timestamp() * 1000), "severity_id": 1, "severity": "Informational",
+        "status_id": 2 if failed else 1, "status": "Failure" if failed else "Success", "status_code": reason,
+        "actor": {"user": {"type": "api_key", "type_id": 99, "uid": cred, "credential_uid": cred}},
+        "api": {"operation": tool, "request": {"uid": f"req-{n}"}}, "resources": resources,
+        "cloud": {"provider": "NeevCloud"}, "src_endpoint": {"name": "unknown"}, "osint": [],
+        "metadata": {"version": "1.9.0", "product": {"name": "Sandbox Audit", "vendor_name": "NeevCloud"}, "uid": f"rec-{n}"},
+        **kw})
+
+
+def event_at(e):
+    return datetime.fromtimestamp(e.time / 1000, tz=timezone.utc)
 
 
 def not_found(name):
@@ -34,8 +56,10 @@ class Trails:
         self.endless = False  # hand out a cursor forever, to test the page cap
 
     def add(self, name, records, sandbox_id=None):
-        self.by_name.setdefault(name, []).extend(records)
         self.ids.setdefault(name, sandbox_id or f"0000000{len(self.ids)}-0000-7000-8000-000000000000")
+        for r in records:  # every event names the sandbox it came from
+            r.resources[0].uid = self.ids[name]
+        self.by_name.setdefault(name, []).extend(records)
 
     def audit(self, id, *, from_=None, to=None, cursor=None, limit=None, **_):
         self.calls.append((id, from_, to, cursor, limit))
@@ -43,16 +67,16 @@ class Trails:
             raise not_found(id)
         start = datetime.fromisoformat(from_)
         oldest = datetime.fromisoformat(to) - timedelta(days=self.retention_days)
-        window = [r for r in self.by_name[id] if max(start, oldest) <= r.at <= datetime.fromisoformat(to)]
-        window.sort(key=lambda r: r.at, reverse=True)
+        window = [r for r in self.by_name[id] if max(start, oldest) <= event_at(r) <= datetime.fromisoformat(to)]
+        window.sort(key=lambda r: r.time, reverse=True)
         offset = int(cursor or 0)
         page = window[offset:offset + limit]
         more = self.endless or offset + limit < len(window)
         return AuditTrail.model_validate({
-            "sandbox_id": self.ids[id], "from": max(start, oldest).isoformat(), "to": to,
+            "from": max(start, oldest).isoformat(), "to": to,
             "retention_days": self.retention_days, "window_truncated": start < oldest,
             "next_cursor": str(offset + limit) if more else None,
-            "records": [r.model_dump(mode="json") for r in page]})
+            "data": [r.model_dump(mode="json", exclude_none=True) for r in page]})
 
 
 class FakeSandbox:
@@ -71,7 +95,7 @@ class FakeSandbox:
     def _log(self, tool, target=None, command=None, outcome="success", reason="ok"):
         n = len(self.trails.by_name[self.name])
         self.trails.by_name[self.name].append(record(n, tool, target, command, outcome, reason,
-                                                     at=DEMO_T + timedelta(seconds=n)))
+                                                     at=DEMO_T + timedelta(seconds=n), sandbox=self.trails.ids[self.name]))
 
     def wait_until_ready(self, timeout_ms=None):
         return self

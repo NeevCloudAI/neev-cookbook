@@ -42,9 +42,13 @@ export const FIXTURE: Record<string, string> = {
     "`python -m http.server`\n",
 };
 
-// ExecResultLike and AuditRecordLike are the fields of the SDK's exec result and audit record this script reads.
+// ExecResultLike and AuditEventLike are the fields of the SDK's exec result and audit event this script reads.
 export interface ExecResultLike { exitCode: number; stdout: string; stderr: string }
-export interface AuditRecordLike { tool: string; command?: string; target?: string; outcome: string }
+export interface AuditEventLike { api: { operation: string }; resources?: { type: string; name?: string }[]; status: string }
+
+// program is what an exec event ran, without its arguments; the trail names it in a process resource.
+export const program = (e: AuditEventLike) =>
+  (e.resources ?? []).filter((r) => r.type === "process" && r.name).map((r) => r.name!).at(-1);
 
 // SandboxLike is the part of an SDK sandbox handle this script uses.
 export interface SandboxLike {
@@ -52,7 +56,7 @@ export interface SandboxLike {
   waitUntilReady(options?: { timeoutMs?: number }): Promise<unknown>;
   files: { write(path: string, content: string): Promise<unknown> };
   exec(command: string, options?: { args?: string[]; cwd?: string; signal?: AbortSignal }): Promise<ExecResultLike>;
-  audit(params?: { from?: string; limit?: number }): Promise<{ records: AuditRecordLike[] }>;
+  audit(params?: { from?: string; operation?: string; limit?: number }): Promise<{ data: AuditEventLike[] }>;
   delete(): Promise<void>;
 }
 
@@ -135,11 +139,12 @@ export async function runBoundaryProbes(
 export async function curlRecords(
   sandbox: SandboxLike, since: string,
   opts: { expected?: number; attempts?: number; intervalMs?: number; wait?: (ms: number) => Promise<void>; log?: (s: string) => void } = {},
-): Promise<AuditRecordLike[]> {
+): Promise<AuditEventLike[]> {
   const { expected = 2, attempts = AUDIT_POLL_ATTEMPTS, intervalMs = AUDIT_POLL_INTERVAL_MS, wait = (ms) => sleep(ms), log = console.log } = opts;
-  let records: AuditRecordLike[] = [];
+  let records: AuditEventLike[] = [];
   for (let attempt = 0; attempt < attempts; attempt++) {
-    records = (await sandbox.audit({ from: since, limit: 100 })).records.filter((r) => r.tool === "exec" && r.command === "curl");
+    const page = await sandbox.audit({ from: since, operation: "exec", limit: 100 });
+    records = page.data.filter((e) => e.api.operation === "exec" && program(e) === "curl");
     if (records.length >= expected) return records;
     if (attempt < attempts - 1) await wait(intervalMs);
   }
@@ -192,7 +197,7 @@ export async function run(
     const [paste, pypi] = await runBoundaryProbes(sandbox, { log, signal });
     const held = blockedAndReachable(paste, pypi);
     log("5. Audit trail of the probe curls (program, target, outcome; arguments are never recorded):");
-    for (const r of await curlRecords(sandbox, since, { wait, log })) log(`   ${r.command} ${r.target || "-"} -> ${r.outcome}`);
+    for (const r of await curlRecords(sandbox, since, { wait, log })) log(`   ${program(r)} -> ${r.status.toLowerCase()}`);
     signal?.throwIfAborted(); // the audit read takes no signal, so a Ctrl+C during it is honoured here
     if (!held) { log("The egress boundary did not hold as expected."); return 1; }
     log(`The boundary held: the upload to ${PASTE_HOST} never connected (0 bytes sent), ${ALLOWED_HOST} stayed reachable.`);

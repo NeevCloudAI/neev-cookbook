@@ -25,8 +25,14 @@ OBSERVED_OK = {
 
 
 def audit_record(tool="exec", command="python3", target="harness.py", outcome="success"):
-    """Builds one audit record; outcome exposes .value, as the real SDK enum does."""
-    return SimpleNamespace(tool=tool, command=command, target=target, outcome=SimpleNamespace(value=outcome))
+    """Builds one audit event in the API's shape: a path is a file resource for fs calls, a program a process."""
+    resources = [SimpleNamespace(type="sandbox", name=None)]
+    if target is not None:
+        resources.append(SimpleNamespace(type="file" if tool.startswith("fs.") else "process", name=target))
+    if command is not None:
+        resources.append(SimpleNamespace(type="process", name=command))
+    return SimpleNamespace(api=SimpleNamespace(operation=tool), resources=resources,
+                           status="Success" if outcome == "success" else "Failure")
 
 
 def _result(exit_code=0, stdout="", stderr=""):
@@ -81,7 +87,7 @@ class FakeSandbox:
         return self
 
     def audit(self, from_=None, limit=None, **kwargs):
-        return SimpleNamespace(records=list(self.audit_records), next_cursor=None)
+        return SimpleNamespace(data=list(self.audit_records), next_cursor=None)
 
     def delete(self):
         self.deleted = True

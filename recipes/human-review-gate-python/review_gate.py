@@ -11,7 +11,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from agent import AgentFailed, run_agent
-from review import MAX_ENTRIES, Packet, collect_changes, export, make_activity, printable, to_markdown, to_terminal
+from review import (MAX_ENTRIES, Packet, collect_changes, event_at, export, make_activity, operation, printable,
+                    target, to_markdown, to_terminal)
 
 REQUIRED_ENV = ("NEEV_API_KEY", "NEEV_ORG_ID", "NEEV_PROJECT_ID", "NEEV_MODEL_API_KEY")
 MCP_URL = "https://mcp.sandboxes.as-south-1.ai.neevcloud.com/mcp"
@@ -25,7 +26,7 @@ DEFAULT_TASK = (
 )
 PAGE_SIZE = 25
 MAX_PAGES = 100  # a cap on one read, in case the server never stops handing out cursors
-AUDIT_WAIT_S = 30  # records usually appear within a second; this bounds the wait if they are slow
+AUDIT_WAIT_S = 30  # events usually appear within a few seconds; this bounds the wait if they are slow
 AUDIT_POLL_S = 1
 
 # The small repository the agent changes. The .env holds obviously fake values and only ever exists in the sandbox.
@@ -102,7 +103,7 @@ def read_trail(sandbox) -> tuple[list, int]:
     records, cursor = [], None
     for _ in range(MAX_PAGES):
         page = sandbox.audit(cursor=cursor, limit=PAGE_SIZE)
-        records += page.records
+        records += page.data
         cursor = page.next_cursor
         if not cursor:
             break
@@ -119,12 +120,13 @@ def wait_for_trail(sandbox, enough, sleep, clock) -> tuple[list, int]:
         sleep(AUDIT_POLL_S)
 
 
-def _uploads(records) -> dict:
-    """Maps each written path to its earliest fs.write record time, to find where the script's upload ends."""
+def _uploads(events) -> dict:
+    """Maps each written path to its earliest fs.write event time, to find where the script's upload ends."""
     times = {}
-    for r in records:
-        if r.tool == "fs.write" and r.target:
-            times[r.target] = min(r.at, times.get(r.target, r.at))
+    for e in events:
+        path = target(e)
+        if operation(e) == "fs.write" and path:
+            times[path] = min(event_at(e), times.get(path, event_at(e)))
     return times
 
 
@@ -190,7 +192,7 @@ def run(task: str, review_path: Path, out_root: Path, decision: str | None, clie
         log("5. Reading the audit trail page by page...")
         # Read before diffing, so the script's own file reads stay out of the agent's activity.
         records, retention = wait_for_trail(
-            sandbox, lambda rs: sum(r.at > boundary for r in rs) >= session.calls, sleep, clock)
+            sandbox, lambda rs: sum(event_at(r) > boundary for r in rs) >= session.calls, sleep, clock)
         log("6. Diffing the sandbox against the original files...")
         entries = sandbox.files.list(".", recursive=True, max_count=MAX_ENTRIES)
         if len(entries) >= MAX_ENTRIES:

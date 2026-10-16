@@ -85,7 +85,7 @@ test("the trail is read page by page", async () => {
   assert.equal(code, 0); // every page reached the report, not just the first one
   assert.equal(count(md, "setup"), Object.keys(PROJECT).length);
   assert.equal(count(md, "agent"), 3);
-  assert.ok(sb.auditCalls.some((c) => c.cursor !== undefined)); // more records than one page holds
+  assert.ok(sb.auditCalls.some((c) => c.cursor !== undefined)); // more events than one page holds
   assert.ok(sb.auditCalls.every((c) => c.limit === 3));
 });
 
@@ -113,7 +113,7 @@ test("the setup boundary waits for every upload, not just a count", async () => 
     const page = await real(q);
     if (q?.cursor === undefined) polls++;
     // the .env upload lands two polls late
-    if (polls <= 2) page.records = page.records.filter((r) => r.target !== ".env" || r.tool !== "fs.write");
+    if (polls <= 2) page.data = page.data.filter((r) => !(r.api.operation === "fs.write" && r.resources?.some((x) => x.name === ".env")));
     return page;
   };
   const { code, md } = await go({ sb });
@@ -128,8 +128,8 @@ test("agent records that never appear fail after the bound", async () => {
   let seen: string[] | undefined;
   sb.audit = async (q) => {
     const page = await real(q);
-    seen ??= sb.trail.map((r) => r.id); // the setup records are visible; after that, nothing new ever arrives
-    page.records = page.records.filter((r) => seen!.includes(r.id));
+    seen ??= sb.trail.map((r) => r.metadata.uid); // the setup records are visible; after that, nothing new ever arrives
+    page.data = page.data.filter((r) => seen!.includes(r.metadata.uid));
     return page;
   };
   const time = fakeTime();
@@ -150,7 +150,7 @@ test("it waits for every agent call before writing the report", async () => {
     if (sb.trail.length > Object.keys(PROJECT).length && late > 0) {
       // the agent's last call lands a few polls late
       if (q?.cursor === undefined) late--;
-      page.records = page.records.filter((r) => r !== sb.trail.at(-1));
+      page.data = page.data.filter((r) => r !== sb.trail.at(-1));
     }
     return page;
   };
@@ -214,8 +214,8 @@ test("a failed delete keeps the result and names the sandbox", async () => {
 
 test("reading the trail stops after the page cap", async () => {
   let calls = 0;
-  const endless = { async audit() { calls++; return { records: [], next_cursor: "again", retention_days: 30 }; } };
-  assert.deepEqual(await readTrail(endless, 25, 4), { records: [], retentionDays: 30 });
+  const endless = { async audit() { calls++; return { data: [], next_cursor: "again", retention_days: 30 }; } };
+  assert.deepEqual(await readTrail(endless, 25, 4), { events: [], retentionDays: 30 });
   assert.equal(calls, 4);
 });
 

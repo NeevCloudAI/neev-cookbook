@@ -10,7 +10,7 @@ The server here (`untrusted_server.py`) is a deliberate stand-in for a malicious
 
 ## Run it
 
-You need Python 3.11+, a **Sandboxes** key ([create a key](https://docs.ai.neevcloud.com/getting-started/create-api-key)) and your [organization and project IDs](https://docs.ai.neevcloud.com/getting-started/org-and-project). No model key: no language model is involved.
+You need Python 3.11+, a **Sandboxes** key ([create a key](https://docs.ai.neevcloud.com/getting-started/create-api-key)) and your [organization and project IDs](https://docs.ai.neevcloud.com/getting-started/org-and-project#find-your-organization-id-and-project-id). No model key: no language model is involved.
 
 ```bash
 python3.12 -m venv .venv

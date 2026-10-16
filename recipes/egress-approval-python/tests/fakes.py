@@ -2,6 +2,7 @@
 import contextlib
 import copy
 import json
+from datetime import datetime
 from types import SimpleNamespace
 
 # Everything the real server lists, so tests can check the model only ever sees the workspace tools.
@@ -85,9 +86,14 @@ def text(content):
 
 def audit_record(command="curl", tool="exec", outcome="success", at="2026-10-06T10:00:00Z",
                  caller="3f9a12bc-1111-2222-3333-444455556666"):
-    """Builds one audit record; outcome is an enum-like value exposing .value, as the real SDK does."""
-    return SimpleNamespace(tool=tool, command=command, target=None, at=at, caller_source=caller,
-                           outcome=SimpleNamespace(value=outcome))
+    """Builds one audit event in the API's shape: the program is a process resource, the key is on the actor."""
+    resources = [SimpleNamespace(type="sandbox", name=None)]
+    if command is not None:
+        resources.append(SimpleNamespace(type="process", name=command))
+    time_ms = int(datetime.fromisoformat(at.replace("Z", "+00:00")).timestamp() * 1000)
+    user = SimpleNamespace(type="api_key", uid=caller, credential_uid=caller, name=None)
+    return SimpleNamespace(api=SimpleNamespace(operation=tool), resources=resources, time=time_ms,
+                           actor=SimpleNamespace(user=user), status="Success" if outcome == "success" else "Failure")
 
 
 class FakeSandbox:
@@ -142,7 +148,7 @@ class FakeSandbox:
     def audit(self, from_=None, limit=None, **kwargs):
         self.audit_queries.append(from_)
         page = self._audit_pages[0] if len(self._audit_pages) == 1 else self._audit_pages.pop(0)
-        return SimpleNamespace(records=page, next_cursor=None)
+        return SimpleNamespace(data=page, next_cursor=None)
 
     def delete(self):
         self.deleted = True

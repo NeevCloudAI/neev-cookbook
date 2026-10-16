@@ -2,6 +2,7 @@
 import { existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { dirname, relative, resolve, sep } from "node:path";
 import { createTwoFilesPatch } from "diff";
+import type { AuditEvent } from "@neevcloud/sdk";
 
 export const MAX_FILE_BYTES = 200_000; // larger files are not shown, so they cannot be approved unseen
 export const MAX_ENTRIES = 2000; // a listing this long is too big to review by eye
@@ -15,10 +16,25 @@ const CONTROL = /[\x00-\x08\x0b-\x1f\x7f-\x9f­؜᠎​-‏‪-‮⁠-⁩﻿]/g;
 const NOT_RECORDED = "The trail names each operation, the program and the path it acted on, never arguments or file " +
   "contents. Commands the agent runs through MCP exec currently appear without their program name.";
 
-// AuditRecord is the part of one audit record the packet uses, as the SDK returns it.
-export interface AuditRecord {
-  at: string; id: string; tool: string; command?: string; target?: string; outcome: string;
-  reason_code?: string; caller_source?: string; duration_ms?: number;
+export type { AuditEvent };
+
+// Operations whose process resource is the program they ran, not a process they named.
+const PROGRAM_OPS = new Set(["exec", "process.start", "pty_command", "ssh"]);
+
+// operation is the call an event records, such as fs.read or exec.
+export const operation = (e: AuditEvent) => e.api.operation ?? "";
+
+const names = (e: AuditEvent, ...kinds: string[]) =>
+  (e.resources ?? []).filter((r) => kinds.includes(r.type) && r.name).map((r) => r.name!);
+
+// program is what an exec, process start or terminal command ran, without its arguments.
+export const program = (e: AuditEvent) => (PROGRAM_OPS.has(operation(e)) ? names(e, "process", "channel").at(-1) : undefined);
+
+// target is the path an event acted on, or for a process call the process it named.
+export function target(e: AuditEvent): string {
+  const files = names(e, "file");
+  if (files.length) return files[0];
+  return PROGRAM_OPS.has(operation(e)) ? "" : (names(e, "process")[0] ?? "");
 }
 
 // Entry is the part of a directory-listing entry the diff uses.
@@ -98,36 +114,38 @@ export function unified(change: Change): string {
   return body.endsWith("\n") ? body : `${body}\n`;
 }
 
-// flag names why a record deserves a look: a read of a sensitive path, or a delete.
-function flag(r: AuditRecord): string | null {
-  const tool = r.tool ?? ""; const target = r.target ?? "";
-  const program = (r.command ?? "").split("/").at(-1)!;
-  if (tool.includes("remove") || tool.includes("delete") || DELETE_PROGRAMS.has(program)) return "delete";
-  if ((tool.includes("read") || tool.includes("download")) && SENSITIVE.test(target)) return "sensitive read";
+// flag names why an event deserves a look: a read of a sensitive path, or a delete.
+function flag(e: AuditEvent): string | null {
+  const tool = operation(e); const path = target(e);
+  const prog = (program(e) ?? "").split("/").at(-1)!;
+  if (tool.includes("remove") || tool.includes("delete") || DELETE_PROGRAMS.has(prog)) return "delete";
+  if ((tool.includes("read") || tool.includes("download")) && SENSITIVE.test(path)) return "sensitive read";
   return null;
 }
 
-// group labels a record by tool and, for tools that run a program, by that program.
-function group(r: AuditRecord): string {
-  const tool = r.tool || "(unnamed)";
-  if (r.command) return `${tool} ${r.command}`;
+// group labels an event by operation and, for operations that run a program, by that program.
+function group(e: AuditEvent): string {
+  const tool = operation(e) || "(unnamed)";
+  const prog = program(e);
+  if (prog) return `${tool} ${prog}`;
   if (tool === "exec" || tool === "process.start") return `${tool} (program not recorded)`;
   return tool;
 }
 
-// makeActivity keeps the records after boundary (the script's setup ends there), oldest first.
-export function makeActivity(records: AuditRecord[], boundary: string | null): Row[] {
-  const after = boundary === null ? records : records.filter((r) => Date.parse(r.at) > Date.parse(boundary));
-  const ordered = [...after].sort((a, b) => Date.parse(a.at) - Date.parse(b.at));
-  const t0 = ordered.length ? Date.parse(ordered[0].at) : 0;
-  return ordered.map((r) => ({
-    offsetS: (Date.parse(r.at) - t0) / 1000,
-    tool: printable(r.tool || "(unnamed)"),
-    group: printable(group(r)),
-    target: printable(r.target ?? ""),
-    outcome: r.outcome + (r.reason_code && r.reason_code !== "ok" ? ` (${r.reason_code})` : ""),
-    credential: (r.caller_source || "-").slice(0, 8), // enough to tell keys apart without printing the full id
-    flag: flag(r),
+// makeActivity keeps the events after boundary (ms since the epoch; the script's setup ends there), oldest first.
+export function makeActivity(events: AuditEvent[], boundary: number | null): Row[] {
+  const after = boundary === null ? events : events.filter((e) => e.time > boundary);
+  const ordered = [...after].sort((a, b) => a.time - b.time);
+  const t0 = ordered.length ? ordered[0].time : 0;
+  return ordered.map((e) => ({
+    offsetS: (e.time - t0) / 1000,
+    tool: printable(operation(e) || "(unnamed)"),
+    group: printable(group(e)),
+    target: printable(target(e)),
+    outcome: e.status.toLowerCase() + (e.status_code && e.status_code !== "ok" ? ` (${e.status_code})` : ""),
+    // enough of the key, or of the user's id, to tell callers apart without printing the full id
+    credential: (e.actor.user.credential_uid || e.actor.user.uid || "-").slice(0, 8),
+    flag: flag(e),
   }));
 }
 

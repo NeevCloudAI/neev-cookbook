@@ -112,7 +112,7 @@ def test_read_trail_follows_the_cursor_with_the_same_window_on_every_page():
     trails.add("sb", [record(n, "fs.write", f"f{n}") for n in range(7)])
     since, until = T0 - timedelta(hours=1), T0 + timedelta(hours=1)
     trail = evidence_pack.read_trail(FakeClient(trails), "sb", since, until, page_size=3)
-    assert len(trail.records) == 7 and len({r.id for r in trail.records}) == 7
+    assert len(trail.records) == 7 and len({r.metadata.uid for r in trail.records}) == 7
     assert [c[3] for c in trails.calls] == [None, "3", "6"]
     assert {(c[1], c[2], c[4]) for c in trails.calls} == {(since.isoformat(), until.isoformat(), 3)}
 
@@ -188,8 +188,8 @@ def test_demo_does_sdk_and_mcp_work_exports_before_deleting_and_succeeds(tmp_pat
     assert pack.verify_manifest(tmp_path / "p") == []
     rows = pack.make_rows([evidence_pack.read_trail(FakeClient(client.trails), n, T0 - timedelta(hours=1), NOW) for n in names])
     tools = {(r.sandbox, r.operation, r.outcome) for r in rows}
-    assert (names[0], "fs.read", "error") in tools and (names[0], "process.start sleep", "success") in tools
-    assert (names[1], "exec (program not recorded)", "success") in tools and (names[1], "fs.read", "error") in tools
+    assert (names[0], "fs.read", "failure") in tools and (names[0], "process.start sleep", "success") in tools
+    assert (names[1], "exec (program not recorded)", "success") in tools and (names[1], "fs.read", "failure") in tools
     summary = (tmp_path / "p" / "summary.md").read_text()
     assert "sensitive read" in summary and "delete" in summary
 
@@ -202,7 +202,7 @@ def test_demo_waits_for_late_records_before_exporting(tmp_path):
     def late(id, **kw):
         page = real_audit(id, **kw)
         reads.append(id)
-        return page if len(reads) > 4 else page.model_copy(update={"records": [], "next_cursor": None})
+        return page if len(reads) > 4 else page.model_copy(update={"data": [], "next_cursor": None})
 
     client.trails.audit = late
     assert demo(client, tmp_path / "p", clock=clock) == 0
@@ -212,7 +212,7 @@ def test_demo_waits_for_late_records_before_exporting(tmp_path):
 def test_demo_fails_without_a_pack_when_records_never_arrive_and_still_deletes(tmp_path):
     client, clock, lines = FakeClient(), Clock(), []
     real_audit = client.trails.audit
-    client.trails.audit = lambda id, **kw: real_audit(id, **kw).model_copy(update={"records": [], "next_cursor": None})
+    client.trails.audit = lambda id, **kw: real_audit(id, **kw).model_copy(update={"data": [], "next_cursor": None})
     assert demo(client, tmp_path / "p", lines, clock=clock) == 1
     assert clock.t >= evidence_pack.AUDIT_WAIT_S
     assert not (tmp_path / "p").exists() and all(s.deleted for s in client.sandboxes_made)
@@ -283,8 +283,8 @@ def test_demo_waits_for_a_late_operation_even_when_another_record_already_makes_
         reads.append(id)
         if id.startswith("evidence-mcp-") and len(reads) <= 4:
             # The refused fs_read adds a blank record, so 4 records arrive while process.start is still missing.
-            kept = [r for r in page.records if r.tool != "process.start"]
-            return page.model_copy(update={"records": kept})
+            kept = [r for r in page.data if r.api.operation != "process.start"]
+            return page.model_copy(update={"data": kept})
         return page
 
     client.trails.audit = late_process_start

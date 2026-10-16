@@ -193,11 +193,11 @@ def _attempt(client, model_client, model: str, connect, name: str, log, sleep) -
         log(f"There is no sandbox named {name}: the agent did not call create_sandbox, or the call failed.")
         return 1
     log("4. What the agent did, from the sandbox's audit trail:")
-    records, _ = verify.settled_trail(sandbox, sleep=sleep)
-    for line in verify.timeline(records) + [""] + verify.summary(records):
+    events, _ = verify.settled_trail(sandbox, sleep=sleep)
+    for line in verify.timeline(events) + [""] + verify.summary(events):
         log(f"   {line}")
     # Only the agent writes files; the script's own test run shares its key, so an exec proves nothing.
-    if not any(r.tool == "fs.write" for r in records):
+    if not any(verify.operation(e) == "fs.write" for e in events):
         log("The audit trail shows no file writes.")
         return 1
     if exit_code != 0 or passed < 1 or failed:

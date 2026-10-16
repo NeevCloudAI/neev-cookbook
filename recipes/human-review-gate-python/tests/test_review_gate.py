@@ -3,6 +3,7 @@ from types import SimpleNamespace
 
 import pytest
 
+import review
 import review_gate
 from tests.fakes import FakeModel, FakeSandbox, FakeSession, tool_call
 
@@ -202,7 +203,7 @@ def test_waits_for_agent_records_that_land_late(tmp_path):
         if len(sb.trail) > len(review_gate.PROJECT) and late["polls"] > 0:  # the agent's last record is late
             if kw.get("cursor") is None:
                 late["polls"] -= 1
-            page.records = [r for r in page.records if r is not sb.trail[-1]]
+            page.data = [r for r in page.data if r is not sb.trail[-1]]
         return page
 
     sb.audit = audit
@@ -223,7 +224,7 @@ def test_setup_boundary_waits_for_every_upload_not_just_a_count(tmp_path):
         page = real_audit(**kw)
         if early["polls"] > 0:  # the uploads have not landed yet; only the bootstrap records show
             early["polls"] -= kw.get("cursor") is None
-            page.records = [r for r in page.records if r.command == "bootstrap"]
+            page.data = [r for r in page.data if review.program(r) == "bootstrap"]
             page.next_cursor = None
         return page
 
@@ -241,8 +242,8 @@ def test_agent_records_that_never_appear_still_go_to_review_with_a_warning(tmp_p
     def audit(**kw):
         page = real_audit(**kw)
         if not setup:  # the setup records are visible; the agent's never arrive
-            setup.extend(page.records)
-        page.records = [r for r in page.records if r in setup]
+            setup.extend(page.data)
+        page.data = [r for r in page.data if r in setup]
         page.next_cursor = None
         return page
 
@@ -320,7 +321,7 @@ def test_reading_the_trail_stops_after_max_pages(monkeypatch):
     class Endless:
         def audit(self, cursor=None, limit=None):
             calls.append(cursor)
-            return SimpleNamespace(records=[], next_cursor="again", retention_days=30)
+            return SimpleNamespace(data=[], next_cursor="again", retention_days=30)
 
     monkeypatch.setattr(review_gate, "MAX_PAGES", 4)
     assert review_gate.read_trail(Endless()) == ([], 30)

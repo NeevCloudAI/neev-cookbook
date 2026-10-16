@@ -13,6 +13,8 @@ from pathlib import Path
 SENSITIVE = re.compile(r"(^|/)\.env(\.[^/]*)?$|(^|/)\.ssh(/|$)|(^|/)id_(rsa|ecdsa|ed25519)\b|^/etc/(passwd|shadow)$")
 DELETE_PROGRAMS = {"rm", "rmdir", "unlink", "shred"}
 TERMINAL_TOOLS = {"pty_command", "ssh"}
+# Operations whose process resource is the program they ran, not a process they named.
+PROGRAM_OPS = {"exec", "process.start", "pty_command", "ssh"}
 CONTROL = re.compile(r"[\x00-\x1f\x7f]")
 FORMULA_START = ("=", "+", "-", "@", "\t", "\r", "'")  # ' too, so a prefixed value stays unambiguous
 LIST_CAP = 50  # errors and sensitive operations listed in the summary; the CSV always has them all
@@ -93,25 +95,70 @@ def _text(v) -> str:
     return "" if v is None else str(getattr(v, "value", v))
 
 
+def event_at(event) -> datetime:
+    """When the event was recorded; the trail gives milliseconds since the epoch."""
+    return datetime.fromtimestamp(event.time / 1000, tz=timezone.utc)
+
+
+def operation(event) -> str:
+    """The call the event records, such as fs.read or exec."""
+    return event.api.operation or ""
+
+
+def _resources(event, *kinds: str) -> list:
+    return [r for r in event.resources or [] if _text(r.type) in kinds]
+
+
+def program(event) -> str:
+    """The program an exec, process start or terminal command ran, without its arguments."""
+    if operation(event) not in PROGRAM_OPS:
+        return ""
+    names = [r.name for r in _resources(event, "process", "channel") if r.name]
+    return names[-1] if names else ""
+
+
+def target(event) -> str:
+    """The path the event acted on, or for a process call the process it named."""
+    files = [r.name for r in _resources(event, "file") if r.name]
+    if files:
+        return files[0]
+    if operation(event) in PROGRAM_OPS:
+        return ""
+    return next((r.name for r in _resources(event, "process") if r.name), "")
+
+
+def credential(event) -> str:
+    """The API key a call was made with, or for a signed-in console user that user's id."""
+    user = event.actor.user
+    return user.credential_uid or ("" if _text(user.type) == "unknown" else user.uid)
+
+
+def sandbox_id(event) -> str:
+    """The sandbox the event came from, as its sandbox resource names it."""
+    return next((r.uid for r in _resources(event, "sandbox") if r.uid), "")
+
+
 def flag(record) -> str | None:
-    """Names why a record is sensitive: a read of a secret-looking path, a delete, or a terminal session."""
-    tool, target = record.tool or "", record.target or ""
-    program = (record.command or "").rsplit("/", 1)[-1]
+    """Names why an event is sensitive: a read of a secret-looking path, a delete, or a terminal session."""
+    tool, path = operation(record), target(record)
+    prog = program(record).rsplit("/", 1)[-1]
     if tool in TERMINAL_TOOLS:
         return "terminal session"
-    if "remove" in tool or "delete" in tool or program in DELETE_PROGRAMS:
+    if "remove" in tool or "delete" in tool or prog in DELETE_PROGRAMS:
         return "delete"
-    if ("read" in tool or "download" in tool) and SENSITIVE.search(target):
+    if ("read" in tool or "download" in tool) and SENSITIVE.search(path):
         return "sensitive read"
     return None
 
 
 def make_rows(trails: list[Trail]) -> list[Row]:
     """Flattens every sandbox's records into one list, oldest first."""
-    rows = [Row(at=r.at, sandbox=t.name, sandbox_id=t.sandbox_id, record_id=r.id, credential=r.caller_source or "",
-                tool=r.tool or "", command=_text(r.command), target=_text(r.target), outcome=_text(r.outcome),
-                reason_code=_text(r.reason_code), duration_ms=_text(r.duration_ms), request_id=_text(r.request_id),
-                pty_id=_text(r.pty_id), seq=_text(r.seq), sensitive=flag(r) or "")
+    rows = [Row(at=event_at(r), sandbox=t.name, sandbox_id=t.sandbox_id, record_id=r.metadata.uid,
+                credential=credential(r), tool=operation(r), command=program(r), target=target(r),
+                outcome=r.status.lower(), reason_code=_text(r.status_code), duration_ms=_text(r.duration),
+                request_id=_text(r.api.request.uid if r.api.request else None),
+                pty_id=next((x.uid for x in _resources(r, "terminal") if x.uid), ""),
+                seq=_text(r.metadata.sequence), sensitive=flag(r) or "")
             for t in trails for r in t.records]
     return sorted(rows, key=lambda r: (r.at, r.sandbox, r.record_id))
 
@@ -194,10 +241,11 @@ def to_markdown(trails: list[Trail], rows: list[Row], since: datetime, until: da
            "## Sandboxes", "", "| Sandbox | Sandbox id | Records | Window served | Note |", "|---|---|---|---|---|"]
     for t in trails:
         note = f"starts at the {t.retention_days}-day retention limit, later than requested" if t.truncated else " "
-        out.append(f"| {_md(t.name)} | `{t.sandbox_id}` | {len(t.records)} | {stamp(t.window_from)} to "
+        out.append(f"| {_md(t.name)} | `{t.sandbox_id or '-'}` | {len(t.records)} | {stamp(t.window_from)} to "
                    f"{stamp(t.window_to)} | {note} |")
     out += ["", "## Credentials", "",
-            "Each credential is an API key id. It identifies a key, not a person.", "",
+            "Each credential is the API key a call was made with, or for a signed-in console user that user's id. "
+            "A key identifies a key, not a person.", "",
             "| Credential | Sandboxes | Records | Errors | Sensitive | First | Last |", "|---|---|---|---|---|---|---|"]
     out += [f"| `{_md(c.credential) if c.credential else '(none)'}` | {_md(', '.join(c.sandboxes))} | {c.records} "
             f"| {c.errors} | {c.flagged} | {stamp(c.first_at)} | {stamp(c.last_at)} |" for c in creds]
@@ -211,12 +259,12 @@ def to_markdown(trails: list[Trail], rows: list[Row], since: datetime, until: da
     out += _listing(flagged, "sensitive operations")
     out += ["", "## What the trail records, and what it does not", "",
             "- Each record holds when the operation happened (server time), the operation, the program it ran "
-            "without its arguments, the path it acted on, whether it succeeded and why not, how long it took, the "
-            "credential it ran under and a request id.",
+            "without its arguments, the path it acted on, whether it succeeded and why not, how long it took, who "
+            "made the call and a request id.",
             "- A record has no field for command arguments, file contents, or input sent to a program. A command "
             "such as `ls -la` is recorded as `ls`.",
-            "- The outcome says whether the call succeeded, not the program's exit code: a command that ran and "
-            "exited non-zero is recorded as `success`.",
+            "- The outcome (`success` or `failure`) says whether the call succeeded, not the program's exit code: "
+            "a command that ran and exited non-zero is recorded as `success`.",
             "- Work done over the Sandbox MCP Server is recorded like SDK work, under the key that connected, with "
             "no mark that it came over MCP. Give each agent or tenant its own key to tell them apart.",
             "- Commands run through the MCP `exec` tool are currently recorded without their program name, and a "

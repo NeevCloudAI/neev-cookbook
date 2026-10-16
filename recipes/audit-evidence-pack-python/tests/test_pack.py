@@ -64,7 +64,7 @@ def test_pack_writes_records_credentials_summary_and_a_manifest_that_verifies(tm
     assert pack.verify_manifest(tmp_path) == []
     rows = read_csv(tmp_path / "records.csv")
     assert len(rows) == 7 and rows[0]["credential"] == CRED_A and rows[0]["at"] == "2026-10-05T12:00:01Z"
-    assert rows[4]["sensitive"] == "sensitive read" and rows[5]["outcome"] == "error" and rows[5]["reason_code"] == "not_found"
+    assert rows[4]["sensitive"] == "sensitive read" and rows[5]["outcome"] == "failure" and rows[5]["reason_code"] == "not_found"
     assert {r["credential"] for r in read_csv(tmp_path / "credentials.csv")} == {CRED_A, CRED_B}
 
 

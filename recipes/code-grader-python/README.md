@@ -8,7 +8,7 @@ Grade a pile of untrusted student or candidate submissions in parallel, each in 
 
 ## Run it
 
-You need Python 3.11+, a **Sandboxes** key ([create a key](https://docs.ai.neevcloud.com/getting-started/create-api-key)) and your [organization and project IDs](https://docs.ai.neevcloud.com/getting-started/org-and-project). A **Model API** key is needed only for `--feedback`.
+You need Python 3.11+, a **Sandboxes** key ([create a key](https://docs.ai.neevcloud.com/getting-started/create-api-key)) and your [organization and project IDs](https://docs.ai.neevcloud.com/getting-started/org-and-project#find-your-organization-id-and-project-id). A **Model API** key is needed only for `--feedback`.
 
 ```bash
 python3.12 -m venv .venv

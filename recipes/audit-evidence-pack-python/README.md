@@ -8,7 +8,7 @@ Your auditor asks what your agents did last month, and under which credentials. 
 
 ## Run it
 
-You need Python 3.11+, a **Sandboxes** key ([create a key](https://docs.ai.neevcloud.com/getting-started/create-api-key)) and your [organization and project IDs](https://docs.ai.neevcloud.com/getting-started/org-and-project). No model key: nothing here calls a model.
+You need Python 3.11+, a **Sandboxes** key ([create a key](https://docs.ai.neevcloud.com/getting-started/create-api-key)) and your [organization and project IDs](https://docs.ai.neevcloud.com/getting-started/org-and-project#find-your-organization-id-and-project-id). No model key: nothing here calls a model.
 
 ```bash
 python3.12 -m venv .venv
@@ -60,9 +60,9 @@ Inside the pack's folder, run `shasum -a 256 -c MANIFEST.sha256` (macOS) or `sha
 
 ## What the trail records
 
-- When the operation happened, what it was, the program (never its arguments), the path, the outcome, how long it took, the API key and a request id. `ls -la` is recorded as `ls`; file contents and input are never recorded.
+- When the operation happened, what it was, the program (never its arguments), the path, the outcome (`success` or `failure`), how long it took, who made the call and a request id. `ls -la` is recorded as `ls`; file contents and input are never recorded.
 - The outcome is whether the call succeeded, not the program's exit code.
-- The API key identifies a key, not a person. Work over MCP is recorded like SDK work, under the key that connected.
+- Calls made with an API key are grouped under that key, which identifies a key, not a person; calls from a signed-in console user are grouped under that user's id. Work over MCP is recorded like SDK work, under the key that connected.
 - Commands run through the MCP `exec` tool are currently recorded without their program name, and a refused MCP call adds a record with no operation name, shown as `(unnamed)`. The demo shows both.
 - Lifecycle events (creating, pausing, deleting a sandbox) are not part of this trail.
 

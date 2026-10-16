@@ -1,6 +1,7 @@
 """In-memory stand-ins for the sandbox MCP server, the NeevAI client and a model client."""
 import copy
 import json
+from datetime import datetime
 from types import SimpleNamespace
 
 from neevai import AuditTrail, NotFoundError
@@ -22,17 +23,35 @@ def _err(message):
 
 def record(tool, target=None, command=None, outcome="success", reason="ok", at="2026-10-05T15:21:33Z",
            caller="key-1111-2222", duration_ms=3, rid="r"):
-    """Builds one audit record in the API's JSON shape."""
-    return {"at": at, "id": rid, "tool": tool, "target": target, "command": command, "outcome": outcome,
-            "reason_code": reason, "caller_source": caller, "duration_ms": duration_ms}
+    """Builds one audit event in the API's JSON shape: a path is a file resource, a program a process."""
+    resources = [{"type": "sandbox", "uid": "01a10ca6-f39d-793d-b659-7aa536f71813"}]
+    if target is not None:
+        resources.append({"type": "file" if tool.startswith("fs.") else "process", "name": target})
+    if command is not None:
+        resources.append({"type": "process", "name": command})
+    failed = outcome != "success"
+    event = {
+        "class_uid": 6003, "class_name": "API Activity", "category_uid": 6, "category_name": "Application Activity",
+        "activity_id": 99, "activity_name": "Other", "type_uid": 600399, "type_name": "API Activity: Other",
+        "time": int(datetime.fromisoformat(at.replace("Z", "+00:00")).timestamp() * 1000),
+        "severity_id": 1, "severity": "Informational",
+        "status_id": 2 if failed else 1, "status": "Failure" if failed else "Success", "status_code": reason,
+        "actor": {"user": {"type": "api_key", "type_id": 99, "uid": caller, "credential_uid": caller}},
+        "api": {"operation": tool}, "resources": resources, "cloud": {"provider": "NeevCloud"},
+        "src_endpoint": {"name": "unknown"}, "osint": [],
+        "metadata": {"version": "1.9.0", "product": {"name": "Sandbox Audit", "vendor_name": "NeevCloud"}, "uid": rid},
+    }
+    if duration_ms is not None:
+        event["duration"] = duration_ms
+    return event
 
 
 def trail(records, next_cursor=None, truncated=False):
     """Builds a real AuditTrail page from record dicts."""
     return AuditTrail.model_validate({
-        "sandbox_id": "01a10ca6-f39d-793d-b659-7aa536f71813", "from": "2026-10-05T15:00:00Z",
+        "from": "2026-10-05T15:00:00Z",
         "to": "2026-10-05T16:00:00Z", "retention_days": 30, "window_truncated": truncated,
-        "next_cursor": next_cursor, "records": records})
+        "next_cursor": next_cursor, "data": records})
 
 
 class FakeSession:
