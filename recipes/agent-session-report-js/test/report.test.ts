@@ -3,7 +3,7 @@ import { test } from "node:test";
 import { flag, groupKey, makeReport, toMarkdown, toTerminal } from "../report.ts";
 import { CREDENTIAL, FakeSandbox } from "./fakes.ts";
 
-// records builds audit records, oldest first, from [tool, target, command] triples.
+// records builds audit events, oldest first, from [tool, target, command] triples.
 function records(...specs: [string, string?, string?][]) {
   const sb = new FakeSandbox();
   for (const [tool, target, command] of specs) sb.record(tool, { target, command });
@@ -40,20 +40,20 @@ test("records group by tool and program, naming a missing program", () => {
 
 test("the report orders oldest first and splits setup from the agent", () => {
   const trail = records(["fs.write", ".env"], ["fs.read", ".env"], ["exec"]);
-  const report = makeReport("session-report-1", [...trail].reverse(), trail[0].at, 30);
+  const report = makeReport("session-report-1", [...trail].reverse(), trail[0].time, 30);
   assert.deepEqual(report.rows.map((r) => [r.phase, r.tool]), [["setup", "fs.write"], ["agent", "fs.read"], ["agent", "exec"]]);
   assert.deepEqual(report.rows.map((r) => r.offsetS), [0, 1, 2]);
   assert.equal(report.agentActions, 2);
 });
 
-test("terminal and Markdown carry outcome, duration, credential and flags", () => {
+test("terminal and Markdown carry outcome, duration, actor and flags", () => {
   const sb = new FakeSandbox();
   sb.record("fs.write", { target: ".env" });
   sb.record("fs.read", { target: ".env", durationMs: 3 });
   sb.record("fs.read", { target: "missing.txt", outcome: "error", reason: "not_found", durationMs: null });
-  const report = makeReport("session-report-1", [...sb.trail].reverse(), sb.trail[0].at, 30);
+  const report = makeReport("session-report-1", [...sb.trail].reverse(), sb.trail[0].time, 30);
   for (const out of [toTerminal(report), toMarkdown(report)]) {
-    for (const want of ["session-report-1", "sensitive read", "error (not_found)", "3 ms", CREDENTIAL.slice(0, 8), "30 days", "Not recorded"]) {
+    for (const want of ["session-report-1", "sensitive read", "failure (not_found)", "3 ms", CREDENTIAL.slice(0, 8), "30 days", "Not recorded"]) {
       assert.ok(out.includes(want), `${want} missing from:\n${out}`);
     }
   }

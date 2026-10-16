@@ -1,11 +1,14 @@
 // test/fakes.ts: in-memory stand-ins for a sandbox with files and an audit trail, its MCP session, and a model client.
 import type { ModelLike, SessionLike } from "../agent.ts";
-import type { AuditRecord, Entry } from "../review.ts";
+import type { AuditEvent, Entry } from "../review.ts";
 
 // Everything the real server lists, so tests can check the model only ever sees the workspace tools.
 const SERVER_TOOLS = ["exec", "fs_read", "fs_write", "fs_list", "process_start", "delete_sandbox", "rollback_sandbox", "expose_port"];
 export const CREDENTIAL = "c0de0001-0000-7000-8000-000000000000";
 const T0 = Date.parse("2026-10-05T12:00:00Z");
+const DEVICE = { type_id: 6, type: "Virtual", uid: "sb" } as const;
+const CLOUD = { provider: "NeevCloud", account: { uid: "prj-fake" }, org: { uid: "org-fake" } };
+const METADATA = (uid: string) => ({ version: "1.9.0", product: { name: "Sandbox Audit", vendor_name: "NeevCloud" }, uid });
 
 const ok = (data: Record<string, unknown>) => ({ isError: false, structuredContent: data, content: [{ type: "text", text: JSON.stringify(data) }] });
 const err = (message: string) => ({ isError: true, content: [{ type: "text", text: message }] });
@@ -16,12 +19,12 @@ export const entry = (path: string, type: Entry["type"] = "file", size = 0, syml
   ({ path, name: path.split("/").at(-1)!, type, size, symlinkTarget });
 
 // FakeSandbox mimics a sandbox handle: files over a map, and audit() over one trail served newest first in pages.
-// hiddenPolls is how many audit() calls see nothing new, like records still on their way.
+// hiddenPolls is how many audit() calls see nothing new, like events still on their way.
 export class FakeSandbox {
   id = "0199-fake";
   fs = new Map<string, string | Uint8Array>();
   links = new Map<string, string>();
-  trail: AuditRecord[] = []; // oldest first; audit() reverses it
+  trail: AuditEvent[] = []; // oldest first; audit() reverses it
   deleted = false;
   auditCalls: { cursor?: string; limit?: number }[] = [];
   files = {
@@ -39,10 +42,33 @@ export class FakeSandbox {
 
   constructor(public name = "review-gate-1", public hiddenPolls = 0) {}
 
-  // record appends one audit record a second after the previous one.
+  // record appends one audit event a second after the previous one, shaped as the API returns it:
+  // a path is a file resource for fs calls, a program a process resource, the key is on the actor.
   record(tool: string, r: { target?: string; command?: string; outcome?: "success" | "error"; reason?: string } = {}) {
-    this.trail.push({ at: new Date(T0 + this.trail.length * 1000).toISOString(), id: `r${this.trail.length}`, tool, target: r.target, command: r.command,
-      outcome: r.outcome ?? "success", reason_code: r.reason ?? "ok", caller_source: CREDENTIAL, duration_ms: 1 });
+    const resources: AuditEvent["resources"] = [{ type: "sandbox", uid: "sb" }];
+    if (r.target !== undefined) resources.push({ type: tool.startsWith("fs.") ? "file" : "process", name: r.target });
+    if (r.command !== undefined) resources.push({ type: "process", name: r.command });
+    const failed = (r.outcome ?? "success") !== "success";
+    this.trail.push({
+      class_uid: 6003, class_name: "API Activity", category_uid: 6, category_name: "Application Activity",
+      activity_id: 99, activity_name: "Other", type_uid: 600399, type_name: "API Activity: Other",
+      time: T0 + this.trail.length * 1000, duration: 1, severity_id: 1, severity: "Informational",
+      status_id: failed ? 2 : 1, status: failed ? "Failure" : "Success", status_code: r.reason ?? "ok",
+      actor: { user: { type: "API Key", type_id: 99, uid: CREDENTIAL, programmatic_credentials: [{ uid: CREDENTIAL, type: "API Key" }] } },
+      api: { operation: tool }, resources, device: DEVICE, cloud: CLOUD, src_endpoint: { name: "unknown" }, osint: [],
+      metadata: METADATA(`e${this.trail.length}`),
+    });
+  }
+
+  // trace appends a Process Activity launch, which execution trace adds to the trail and which has no api.
+  trace(program = "python3") {
+    this.trail.push({
+      class_uid: 1007, class_name: "Process Activity", category_uid: 1, category_name: "System Activity",
+      activity_id: 1, activity_name: "Launch", type_uid: 100701, type_name: "Process Activity: Launch",
+      time: T0 + this.trail.length * 1000, severity_id: 1, severity: "Informational", status_id: 1, status: "Success",
+      actor: { user: { type: "API Key", type_id: 99, uid: CREDENTIAL } },
+      process: { pid: 4242, name: program }, device: DEVICE, cloud: CLOUD, osint: [], metadata: METADATA(`e${this.trail.length}`),
+    });
   }
 
   async waitUntilReady() { return this; }
@@ -55,7 +81,7 @@ export class FakeSandbox {
     const start = Number(q.cursor ?? 0);
     const page = visible.slice(start, start + (q.limit ?? 50));
     const more = start + page.length < visible.length;
-    return { sandbox_id: "sb", from: "", to: "", retention_days: 30, window_truncated: false, records: page,
+    return { from: "", to: "", retention_days: 30, window_truncated: false, data: page,
       next_cursor: more ? String(start + page.length) : undefined };
   }
 }
@@ -87,7 +113,7 @@ export function fakeSession(sandbox = new FakeSandbox(), execOutput = "") {
         return ok({ content: files.get(args.path), eof: true });
       }
       if (name === "fs_list") { sandbox.record("fs.list", { target: args.path ?? "." }); return ok({ entries: [...files.keys()].sort().map((n) => ({ name: n, type: "file" })) }); }
-      if (name === "exec") { sandbox.record("exec"); return ok({ exit_code: 0, stdout: execOutput, stderr: "" }); }
+      if (name === "exec") { sandbox.record("exec"); sandbox.trace(args.program ?? "sh"); return ok({ exit_code: 0, stdout: execOutput, stderr: "" }); }
       return err(`unexpected tool ${name}`);
     },
   };

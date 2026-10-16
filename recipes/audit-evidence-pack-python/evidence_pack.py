@@ -20,8 +20,8 @@ REQUIRED_ENV = ("NEEV_API_KEY", "NEEV_ORG_ID", "NEEV_PROJECT_ID")
 MCP_URL = "https://mcp.sandboxes.as-south-1.ai.neevcloud.com/mcp"
 DEFAULT_DAYS = 30  # the platform keeps 30 days; the server moves an older start forward and says so
 PAGE_SIZE = 200  # the most the audit API returns per page
-MAX_PAGES = 500  # 100,000 records per sandbox; a longer trail fails instead of being exported cut short
-AUDIT_WAIT_S = 30  # demo records usually land within a second; this bounds the wait if they are slow
+MAX_PAGES = 500  # 100,000 events per sandbox; a longer trail fails instead of being exported cut short
+AUDIT_WAIT_S = 30  # demo events usually land within a few seconds; this bounds the wait if they are slow
 AUDIT_POLL_S = 1
 DEMO_MARGIN = timedelta(minutes=5)  # widens the demo window around the run, against clock skew with the server
 RELATIVE = re.compile(r"^(\d+)([dh])$")
@@ -51,13 +51,16 @@ def read_trail(client, sandbox: str, since: datetime, until: datetime, page_size
     for _ in range(MAX_PAGES):
         page = client.sandboxes.audit(sandbox, from_=since.isoformat(), to=until.isoformat(), cursor=cursor, limit=page_size)
         first = first or page
-        records.update((r.id, r) for r in page.records)  # keyed by id, so an overlapping page cannot double-count
+        # Keyed by id, so an overlapping page cannot double-count. Execution trace also logs programs and
+        # connections; the pack exports the API calls, the events that have api.
+        records.update((r.metadata.uid, r) for r in page.data if r.api)
         cursor = page.next_cursor
         if not cursor:
-            return pack.Trail(name=sandbox, sandbox_id=str(first.sandbox_id), window_from=first.from_,
+            ids = {pack.sandbox_id(r) for r in records.values()} - {""}
+            return pack.Trail(name=sandbox, sandbox_id=next(iter(ids), ""), window_from=first.from_,
                               window_to=first.to, truncated=first.window_truncated,
                               retention_days=first.retention_days, records=list(records.values()))
-    raise PackFailed(f"Sandbox {sandbox} has more than {MAX_PAGES * page_size} records in the window; narrow the window")
+    raise PackFailed(f"Sandbox {sandbox} has more than {MAX_PAGES * page_size} events in the window; narrow the window")
 
 
 def _read_all(client, names, since, until, log) -> list[pack.Trail]:
@@ -83,7 +86,7 @@ def wait_for_trails(client, expected: dict[str, Counter], since, until, sleep, c
     deadline = clock() + AUDIT_WAIT_S
     while True:
         trails = [read_trail(client, name, since, until) for name in expected]
-        missing = {t.name: expected[t.name] - Counter(r.tool for r in t.records) for t in trails}
+        missing = {t.name: expected[t.name] - Counter(pack.operation(r) for r in t.records) for t in trails}
         short = [f"{name} (missing {', '.join(sorted(ops.elements()))})" for name, ops in missing.items() if ops]
         if not short:
             return trails

@@ -117,9 +117,19 @@ def blocked_and_reachable(paste, pypi) -> bool:
     return paste_blocked(paste) and pypi.exit_code == 0
 
 
-def _outcome(record) -> str:
-    """Reads an audit record's outcome as a plain string, whether it is an enum or already text."""
-    return getattr(record.outcome, "value", str(record.outcome))
+def _outcome(event) -> str:
+    """An audit event's outcome as a plain word: success or failure."""
+    return str(event.status).lower()
+
+
+def _names(event, kind: str) -> list[str]:
+    return [r.name for r in event.resources or [] if str(getattr(r.type, "value", r.type)) == kind and r.name]
+
+
+def program(event) -> str | None:
+    """The program an exec event ran, without its arguments; the trail names it in a process resource."""
+    names = _names(event, "process")
+    return names[-1] if names else None
 
 
 def curl_records(sandbox, since: str, expected: int = 2, attempts: int = AUDIT_POLL_ATTEMPTS,
@@ -127,7 +137,8 @@ def curl_records(sandbox, since: str, expected: int = 2, attempts: int = AUDIT_P
     """Polls the audit trail from `since` until `expected` curl runs appear; returns what it has when the poll ends."""
     records = []
     for attempt in range(attempts):
-        records = [r for r in sandbox.audit(from_=since, limit=100).records if r.tool == "exec" and r.command == "curl"]
+        page = sandbox.audit(from_=since, operation="exec", limit=100)
+        records = [e for e in page.data if e.api.operation == "exec" and program(e) == "curl"]
         if len(records) >= expected:
             return records
         if attempt < attempts - 1:
@@ -178,7 +189,7 @@ def run(request: str, client, model_client, model: str, connect, log=print, wait
         held = blocked_and_reachable(paste, pypi)
         log("5. Audit trail of the probe curls (program, target, outcome; arguments are never recorded):")
         for record in curl_records(sandbox, since, wait=wait, log=log):
-            log(f"   {record.command} {record.target or '-'} -> {_outcome(record)}")
+            log(f"   {program(record)} -> {_outcome(record)}")
         if not held:
             log("The egress boundary did not hold as expected.")
             return 1

@@ -5,12 +5,16 @@ import uuid
 from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
 
-from neevai import AuditRecord, AuditTrail
+from neevai import AuditEvent, AuditTrail
 
 # Everything the real server lists, so tests can check the model only ever sees the workspace tools.
 SERVER_TOOLS = ("exec", "fs_read", "fs_write", "fs_list", "process_start", "delete_sandbox", "rollback_sandbox", "expose_port")
 CREDENTIAL = "c0de0001-0000-7000-8000-000000000000"
 T0 = datetime(2026, 10, 5, 12, 0, tzinfo=timezone.utc)
+SANDBOX_ID = str(uuid.UUID(int=1))
+DEVICE = {"type_id": 6, "type": "Virtual", "uid": SANDBOX_ID}
+CLOUD = {"provider": "NeevCloud", "account": {"uid": "prj-fake"}, "org": {"uid": "org-fake"}}
+METADATA = {"version": "1.9.0", "product": {"name": "Sandbox Audit", "vendor_name": "NeevCloud"}}
 
 
 def _ok(data):
@@ -29,7 +33,7 @@ def entry(path, type_="file", size=0, target=None):
 class FakeSandbox:
     """Mimics a sandbox handle: files over a dict, and audit() over one trail served newest first in pages.
 
-    hidden_polls is how many audit() calls see nothing new, like records still on their way.
+    hidden_polls is how many audit() calls see nothing new, like events still on their way.
     links maps symlink paths to their targets; they are listed but have no content.
     """
 
@@ -44,10 +48,38 @@ class FakeSandbox:
         self.files = SimpleNamespace(write=self._write, list=self._list, read=self._read)
 
     def record(self, tool, target=None, command=None, outcome="success", reason="ok", duration_ms=1):
-        """Appends one audit record a second after the previous one."""
-        self.trail.append(AuditRecord(
-            at=T0 + timedelta(seconds=len(self.trail)), id=uuid.uuid4().hex, tool=tool, target=target, command=command,
-            outcome=outcome, reason_code=reason, caller_source=CREDENTIAL, duration_ms=duration_ms))
+        """Appends one audit event a second after the previous one, shaped as the API returns it."""
+        resources = [{"type": "sandbox", "uid": SANDBOX_ID}]
+        if target is not None:
+            resources.append({"type": "file" if tool.startswith("fs.") else "process", "name": target})
+        if command is not None:
+            resources.append({"type": "process", "name": command})
+        failed = outcome != "success"
+        event = {
+            "class_uid": 6003, "class_name": "API Activity", "category_uid": 6, "category_name": "Application Activity",
+            "activity_id": 99, "activity_name": "Other", "type_uid": 600399, "type_name": "API Activity: Other",
+            "time": int((T0 + timedelta(seconds=len(self.trail))).timestamp() * 1000),
+            "severity_id": 1, "severity": "Informational",
+            "status_id": 2 if failed else 1, "status": "Failure" if failed else "Success", "status_code": reason,
+            "actor": {"user": {"type": "API Key", "type_id": 99, "uid": CREDENTIAL,
+                               "programmatic_credentials": [{"uid": CREDENTIAL, "type": "API Key"}]}},
+            "api": {"operation": tool}, "resources": resources, "device": DEVICE, "cloud": CLOUD,
+            "src_endpoint": {"name": "unknown"}, "osint": [], "metadata": {**METADATA, "uid": uuid.uuid4().hex},
+        }
+        if duration_ms is not None:
+            event["duration"] = duration_ms
+        self.trail.append(AuditEvent.model_validate(event))
+
+    def trace(self, program="python3"):
+        """Appends a Process Activity launch, which execution trace adds to the trail and which has no api."""
+        self.trail.append(AuditEvent.model_validate({
+            "class_uid": 1007, "class_name": "Process Activity", "category_uid": 1, "category_name": "System Activity",
+            "activity_id": 1, "activity_name": "Launch", "type_uid": 100701, "type_name": "Process Activity: Launch",
+            "time": int((T0 + timedelta(seconds=len(self.trail))).timestamp() * 1000),
+            "severity_id": 1, "severity": "Informational", "status_id": 1, "status": "Success",
+            "actor": {"user": {"type": "API Key", "type_id": 99, "uid": CREDENTIAL}},
+            "process": {"pid": 4242, "name": program}, "device": DEVICE, "cloud": CLOUD, "osint": [],
+            "metadata": {**METADATA, "uid": uuid.uuid4().hex}}))
 
     def _write(self, path, content):
         self.record("fs.write", target=path)
@@ -84,8 +116,8 @@ class FakeSandbox:
         page = visible[start:start + (limit or 50)]
         more = start + len(page) < len(visible)
         return AuditTrail.model_validate({
-            "sandbox_id": str(uuid.UUID(int=1)), "from": T0.isoformat(), "to": (T0 + timedelta(hours=1)).isoformat(),
-            "retention_days": 30, "window_truncated": False, "records": page,
+            "from": T0.isoformat(), "to": (T0 + timedelta(hours=1)).isoformat(),
+            "retention_days": 30, "window_truncated": False, "data": page,
             "next_cursor": str(start + len(page)) if more else None})
 
 
@@ -130,6 +162,7 @@ class FakeSession:
             return _ok({"entries": [{"name": n, "type": "file"} for n in sorted(self.files)]})
         if name == "exec":
             self.sandbox.record("exec", duration_ms=40)
+            self.sandbox.trace(args.get("program", "sh"))
             return _ok({"exit_code": 0, "stdout": self.exec_output, "stderr": ""})
         return _err(f"unexpected tool {name}")
 

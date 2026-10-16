@@ -218,7 +218,7 @@ def test_audit_poll_waits_for_the_probe_records():
     waited = []
     sandbox = FakeSandbox(audit_pages=[[], [audit_record(tool="fs.read", command=None), audit_record()]])
     records = egress_approval.exec_records(sandbox, "T0", expected=1, sleep=waited.append, log=lambda *_: None)
-    assert [r.command for r in records] == ["curl"] and waited == [egress_approval.AUDIT_POLL_INTERVAL_S]
+    assert [egress_approval.program(r) for r in records] == ["curl"] and waited == [egress_approval.AUDIT_POLL_INTERVAL_S]
 
 
 def test_main_exits_2_when_env_missing(monkeypatch, capsys):

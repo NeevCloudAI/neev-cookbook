@@ -12,7 +12,7 @@ There is nothing to install for the agent side: one URL, one API key and one hea
 
 - A NeevCloud account with a project [API key](https://docs.ai.neevcloud.com/getting-started/create-api-key) created with Resource Type **Sandboxes** (`NEEV_API_KEY`)
 - Claude Code, Cursor or Codex
-- For the scripts: Python 3.11 or later, and your [organization and project IDs](https://docs.ai.neevcloud.com/getting-started/org-and-project) (`NEEV_ORG_ID`, `NEEV_PROJECT_ID`) for the project the key belongs to
+- For the scripts: Python 3.11 or later, and your [organization and project IDs](https://docs.ai.neevcloud.com/getting-started/org-and-project#find-your-organization-id-and-project-id) (`NEEV_ORG_ID`, `NEEV_PROJECT_ID`) for the project the key belongs to
 - For `simulate_agent.py` only: a second key with Resource Type **Model API** (`NEEV_MODEL_API_KEY`)
 
 ## 1. Put the key in your environment
@@ -135,7 +135,7 @@ On Windows, see the [setup guide](../../docs/setup.md#windows) for the PowerShel
 You get one line per operation, oldest first:
 
 ```text
-UTC       operation       program     target                          outcome                    took  credential
+UTC       operation       program     target                          outcome                    took  by
 15:34:18  fs.write        -           app/server.js                   success                     2ms  xxxxxxxx
 15:34:18  exec            -           -                               success                   146ms  xxxxxxxx
 15:34:18  process.start   node        -                               success                     5ms  xxxxxxxx
@@ -143,10 +143,10 @@ UTC       operation       program     target                          outcome   
 
 - **operation**: a file read, write or listing, a command, or a process start.
 - **program**: the program's name where it is recorded, never its arguments. Commands run through the MCP `exec` tool show `-` for now.
-- **outcome**: whether the operation completed, not the program's exit code. A failing test run still reads `success`.
-- **credential**: the API key the operation ran under.
+- **outcome**: `success` or `failure`: whether the operation completed, not the program's exit code. A failing test run still reads `success`.
+- **by**: who made the call: the API key it was made with, or the user who made it from the console.
 
-Records appear a few seconds after the work, so `verify.py` waits until the trail stops changing.
+Events appear a few seconds after the work, so `verify.py` waits until the trail stops changing.
 
 ## 5. Clean up
 

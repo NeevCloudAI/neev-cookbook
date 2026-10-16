@@ -8,7 +8,7 @@ Every new sandbox repeats the same slow setup: install packages, build a dataset
 
 ## Run it
 
-You need Python 3.11+, a **Sandboxes** key ([create a key](https://docs.ai.neevcloud.com/getting-started/create-api-key)) and your [organization and project IDs](https://docs.ai.neevcloud.com/getting-started/org-and-project). No model key: nothing here calls a model.
+You need Python 3.11+, a **Sandboxes** key ([create a key](https://docs.ai.neevcloud.com/getting-started/create-api-key)) and your [organization and project IDs](https://docs.ai.neevcloud.com/getting-started/org-and-project#find-your-organization-id-and-project-id). No model key: nothing here calls a model.
 
 ```bash
 python3.12 -m venv .venv

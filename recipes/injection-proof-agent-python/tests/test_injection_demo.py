@@ -155,7 +155,7 @@ def test_curl_records_polls_from_since_until_both_probes_appear():
         [audit_record(tool="fs.read", command=None, target="project/.env"), audit_record()],
         [audit_record(), audit_record(command="python3"), audit_record()]])
     records = curl_records(sandbox, "T0", wait=lambda s: waited.append(s), log=lambda *_: None)
-    assert [r.command for r in records] == ["curl", "curl"]
+    assert [injection_demo.program(r) for r in records] == ["curl", "curl"]
     assert waited == [injection_demo.AUDIT_POLL_INTERVAL_S]
     assert sandbox.audit_queries == ["T0", "T0"]
 

@@ -2,10 +2,31 @@
 import json
 from types import SimpleNamespace
 
+from neevai import AuditEvent
+
+KEY_ID = "1234abcd-5678-4def-9abc-def012345678"
+SANDBOX_ID = "01a10ca6-f39d-793d-b659-7aa536f71813"
+
 
 def audit_record(command="pip3", target=None, outcome="success", tool="exec"):
-    """Builds one audit record; outcome exposes .value, as the real SDK's enum does."""
-    return SimpleNamespace(tool=tool, command=command, target=target, outcome=SimpleNamespace(value=outcome))
+    """Builds one audit event in the API's shape: a program is a process resource, a path a file resource."""
+    resources = [{"type": "sandbox", "uid": SANDBOX_ID}]
+    if target is not None:
+        resources.append({"type": "file", "name": target})
+    if command is not None:
+        resources.append({"type": "process", "name": command})
+    failed = outcome != "success"
+    return AuditEvent.model_validate({
+        "class_uid": 6003, "class_name": "API Activity", "category_uid": 6, "category_name": "Application Activity",
+        "activity_id": 1, "activity_name": "Create", "type_uid": 600301, "type_name": "API Activity: Create",
+        "time": 1_791_200_000_000, "severity_id": 1, "severity": "Informational",
+        "status_id": 2 if failed else 1, "status": "Failure" if failed else "Success",
+        "actor": {"user": {"type": "API Key", "type_id": 99, "uid": KEY_ID,
+                           "programmatic_credentials": [{"uid": KEY_ID, "type": "API Key"}]}},
+        "api": {"operation": tool}, "resources": resources,
+        "device": {"type_id": 6, "type": "Virtual", "uid": SANDBOX_ID},
+        "cloud": {"provider": "NeevCloud", "account": {"uid": "prj-fake"}, "org": {"uid": "org-fake"}}, "osint": [],
+        "metadata": {"version": "1.9.0", "product": {"name": "Sandbox Audit", "vendor_name": "NeevCloud"}, "uid": "e1"}})
 
 
 # A phone-home marker that recorded a blocked attempt: the TCP connection to the collector never opened.
@@ -66,7 +87,7 @@ class FakeSandbox:
     def audit(self, from_=None, limit=None, **kwargs):
         self.audit_queries.append(from_)
         page = self._audit_pages[0] if len(self._audit_pages) == 1 else self._audit_pages.pop(0)
-        return SimpleNamespace(records=page, next_cursor=None)
+        return SimpleNamespace(data=page, next_cursor=None)
 
     def delete(self):
         self.deleted = True

@@ -3,7 +3,7 @@ from types import SimpleNamespace
 
 import quarantine
 from quarantine import beacon_lines, probe_blocked, read_observed, run, verdict
-from tests.fakes import CLEAN_PS, OBSERVED_OK, FakeClient, FakeSandbox, _result
+from tests.fakes import CLEAN_PS, OBSERVED_OK, FakeClient, FakeSandbox, _result, audit_record, network_event, process_event
 
 RECIPE_DIR = Path(__file__).resolve().parent.parent
 
@@ -39,6 +39,28 @@ def test_happy_path_contains_the_server_and_detects_every_move():
     assert "[PASS] the server's secret reads were seen" in text
     assert "[PASS] the background process the server spawned was detected" in text
     assert "quarantine held" in text
+
+
+def test_audit_trail_lists_the_calls_and_the_denied_connections_from_execution_trace():
+    sandbox = FakeSandbox(audit_records=[network_event(), process_event("sh"), audit_record()])
+    code, lines = go(sandbox)
+    trail = lines[next(i for i, l in enumerate(lines) if l.startswith("7.")) + 1:lines.index("Verdict:")]
+    assert code == 0
+    assert trail == ["   exec python3 -> success",
+                     "   connection to 93.184.215.14:443 by python3 -> failure"]
+
+
+def test_connections_print_oldest_first_so_the_servers_own_attempt_comes_before_the_probes():
+    probe = network_event(dst={"ip": "151.101.0.223", "port": 443}, program="curl")
+    server = network_event(program="python3")
+    code, lines = go(FakeSandbox(audit_records=[probe, server]))  # newest first, as the API serves them
+    connections = [l for l in lines if l.startswith("   connection to ")]
+    assert code == 0 and connections == ["   connection to 93.184.215.14:443 by python3 -> failure",
+                                         "   connection to 151.101.0.223:443 by curl -> failure"]
+
+
+def test_a_connection_to_a_local_socket_is_named_by_its_path():
+    assert quarantine.connection(network_event(dst={"name": "unix:/run/x.sock"}, program=None)) == "unix:/run/x.sock"
 
 
 def test_create_uses_pypi_allow_list_and_the_prefix():

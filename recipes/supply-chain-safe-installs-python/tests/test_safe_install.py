@@ -182,7 +182,7 @@ def test_pip_records_polls_from_since_until_both_runs_appear():
         [audit_record(tool="fs.write", command=None, target="evilpkg/setup.py")],
         [audit_record(), audit_record(command="python3"), audit_record()]])
     records = pip_records(sandbox, "T0", wait=lambda s: waited.append(s), log=lambda *_: None)
-    assert [r.command for r in records] == ["pip3", "pip3"]
+    assert [safe_install.program(r) for r in records] == ["pip3", "pip3"]
     assert waited == [safe_install.AUDIT_POLL_INTERVAL_S]
     assert sandbox.audit_queries == ["T0", "T0"]
 

@@ -128,15 +128,40 @@ def _answer_text(answer) -> str:
     return str(answer)
 
 
-def _outcome(record) -> str:
-    """Reads an audit record's outcome as plain text, whether it is an enum or already a string."""
-    return getattr(record.outcome, "value", str(record.outcome))
+def _outcome(event) -> str:
+    """An audit event's outcome as a plain word: success or failure."""
+    return str(event.status).lower()
+
+
+# Operations whose process resource is the program they ran, not a process they named.
+PROGRAM_OPS = {"exec", "process.start", "pty_command", "ssh"}
+NETWORK_ACTIVITY = 4001  # the OCSF class of a connection a program in the sandbox opened
+
+
+def _names(event, *kinds: str) -> list[str]:
+    return [r.name for r in event.resources or [] if str(getattr(r.type, "value", r.type)) in kinds and r.name]
+
+
+def describe(event) -> str:
+    """The operation, the program it ran and the path it acted on, as one short line."""
+    op = event.api.operation or ""
+    programs = _names(event, "process", "channel") if op in PROGRAM_OPS else []
+    paths = _names(event, "file") or ([] if op in PROGRAM_OPS else _names(event, "process"))
+    parts = [op, programs[-1] if programs else "-", paths[0] if paths else ""]
+    return " ".join(p for p in parts if p)
+
+
+def connection(event) -> str:
+    """Where a Network Activity event's connection went, and the program that opened it."""
+    dst = event.dst_endpoint
+    where = (dst.name or f"{dst.ip}:{dst.port}") if dst else "-"
+    return f"{where} by {event.process.name}" if event.process and event.process.name else where
 
 
 def recent_records(sandbox, since: str, limit: int = 100) -> list:
-    """Reads the audit trail from `since`, newest first; empty on any error so it never breaks the run."""
+    """Reads the audit trail's events from `since`, newest first; empty on any error so it never breaks the run."""
     try:
-        return sandbox.audit(from_=since, limit=limit).records
+        return sandbox.audit(from_=since, limit=limit).data
     except Exception:
         return []
 
@@ -194,9 +219,13 @@ def run(client, source_dir: Path, log=print) -> int:
         for line in beacons:
             log(f"   Background process still running: {line}")
         log("7. Audit trail (program and target only; never the arguments or any stolen bytes):")
-        for record in recent_records(sandbox, since)[:8]:
-            parts = [record.tool, record.command or "-", record.target or ""]
-            log(f"   {' '.join(p for p in parts if p)} -> {_outcome(record)}")
+        events = recent_records(sandbox, since)
+        # Execution trace adds programs and connections without api. Connections go oldest first: the server's own
+        # attempts came before this script's probes and the beacon's repeats.
+        for record in [e for e in events if e.api][:8]:
+            log(f"   {describe(record)} -> {_outcome(record)}")
+        for record in [e for e in reversed(events) if e.class_uid == NETWORK_ACTIVITY][:8]:
+            log(f"   connection to {connection(record)} -> {_outcome(record)}")
         blocked = probe_blocked(exfil) and probe_blocked(pypi) and server_blocked
         read_seen = bool(reads)      # the sandbox cannot see in-process reads; this is the server's own report
         spawn_seen = bool(beacons)   # independently observed in the process list

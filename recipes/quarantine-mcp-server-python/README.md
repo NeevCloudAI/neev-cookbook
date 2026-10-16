@@ -10,7 +10,7 @@ The server here (`untrusted_server.py`) is a deliberate stand-in for a malicious
 
 ## Run it
 
-You need Python 3.11+, a **Sandboxes** key ([create a key](https://docs.ai.neevcloud.com/getting-started/create-api-key)) and your [organization and project IDs](https://docs.ai.neevcloud.com/getting-started/org-and-project). No model key: no language model is involved.
+You need Python 3.11+, a **Sandboxes** key ([create a key](https://docs.ai.neevcloud.com/getting-started/create-api-key)) and your [organization and project IDs](https://docs.ai.neevcloud.com/getting-started/org-and-project#find-your-organization-id-and-project-id). No model key: no language model is involved.
 
 ```bash
 python3.12 -m venv .venv
@@ -39,7 +39,7 @@ Neither the MCP package nor the untrusted server ever runs on your machine. The 
 
 ## Good to know
 
-- The audit trail records operations made through the sandbox (commands, file writes), not every system call a process makes. The server's own file reads and connection attempts don't appear there.
+- The audit trail records the calls made into the sandbox (commands, file writes) and, with execution trace on, each program that started and each connection a program opened. The script prints the first of those connections, oldest first, so the server's blocked attempts show there unless one failed before a connection opened, such as at name lookup. The server's own file reads don't appear: the trail doesn't record every system call a process makes.
 - That is why the network policy, not a log, is what protects you: the trail tells you what ran, and denied egress makes sure nothing it took can leave.
 - The secret reads in the output come from the server's own record, which this stand-in keeps so you can see them.
 

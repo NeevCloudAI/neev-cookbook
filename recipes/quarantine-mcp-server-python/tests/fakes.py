@@ -2,7 +2,12 @@
 import json
 from types import SimpleNamespace
 
+from neevai import AuditEvent
+
 import quarantine
+
+KEY_ID = "1234abcd-5678-4def-9abc-def012345678"
+SANDBOX_ID = "01a10ca6-f39d-793d-b659-7aa536f71813"
 
 # A process listing in which the untrusted server's beacon is visible, reading both planted secrets.
 BEACON_PS = (
@@ -24,9 +29,44 @@ OBSERVED_OK = {
 }
 
 
+def _event(outcome, **fields):
+    failed = outcome != "success"
+    return AuditEvent.model_validate({
+        "time": 1_791_200_000_000, "severity_id": 1, "severity": "Informational",
+        "status_id": 2 if failed else 1, "status": "Failure" if failed else "Success",
+        "actor": {"user": {"type": "API Key", "type_id": 99, "uid": KEY_ID,
+                           "programmatic_credentials": [{"uid": KEY_ID, "type": "API Key"}]}},
+        "device": {"type_id": 6, "type": "Virtual", "uid": SANDBOX_ID},
+        "cloud": {"provider": "NeevCloud", "account": {"uid": "prj-fake"}, "org": {"uid": "org-fake"}}, "osint": [],
+        "metadata": {"version": "1.9.0", "product": {"name": "Sandbox Audit", "vendor_name": "NeevCloud"}, "uid": "e1"},
+        **fields})
+
+
 def audit_record(tool="exec", command="python3", target="harness.py", outcome="success"):
-    """Builds one audit record; outcome exposes .value, as the real SDK enum does."""
-    return SimpleNamespace(tool=tool, command=command, target=target, outcome=SimpleNamespace(value=outcome))
+    """Builds one audit event in the API's shape: a path is a file resource for fs calls, a program a process."""
+    resources = [{"type": "sandbox", "uid": SANDBOX_ID}]
+    if target is not None:
+        resources.append({"type": "file" if tool.startswith("fs.") else "process", "name": target})
+    if command is not None:
+        resources.append({"type": "process", "name": command})
+    return _event(outcome, class_uid=6003, class_name="API Activity", category_uid=6,
+                  category_name="Application Activity", activity_id=1, activity_name="Create", type_uid=600301,
+                  type_name="API Activity: Create", api={"operation": tool}, resources=resources)
+
+
+def network_event(dst=None, program="python3", outcome="failure"):
+    """Builds a Network Activity event, which execution trace adds for a connection a program opened; no api."""
+    return _event(outcome, class_uid=4001, class_name="Network Activity", category_uid=4,
+                  category_name="Network Activity", activity_id=1, activity_name="Open", type_uid=400101,
+                  type_name="Network Activity: Open", dst_endpoint=dst or {"ip": "93.184.215.14", "port": 443},
+                  process={"pid": 742, "name": program})
+
+
+def process_event(program="sh"):
+    """Builds a Process Activity launch, which execution trace adds for a program the sandbox started; no api."""
+    return _event("success", class_uid=1007, class_name="Process Activity", category_uid=1,
+                  category_name="System Activity", activity_id=1, activity_name="Launch", type_uid=100701,
+                  type_name="Process Activity: Launch", process={"pid": 742, "name": program})
 
 
 def _result(exit_code=0, stdout="", stderr=""):
@@ -81,7 +121,7 @@ class FakeSandbox:
         return self
 
     def audit(self, from_=None, limit=None, **kwargs):
-        return SimpleNamespace(records=list(self.audit_records), next_cursor=None)
+        return SimpleNamespace(data=list(self.audit_records), next_cursor=None)
 
     def delete(self):
         self.deleted = True
