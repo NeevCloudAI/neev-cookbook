@@ -1,14 +1,8 @@
-// A Vercel AI SDK agent whose one tool is a NeevCloud sandbox.
+// Starts a sandbox, runs the Vercel AI SDK agent against it, then deletes it.
 import { createOpenAI } from '@ai-sdk/openai'
 import { Neev } from '@neevcloud/sdk'
-import { generateText, stepCountIs, tool } from 'ai'
-import { z } from 'zod'
-
-const neev = new Neev({
-  apiKey: process.env.NEEV_API_KEY,
-  orgId: process.env.NEEV_ORG_ID,
-  projectId: process.env.NEEV_PROJECT_ID,
-})
+import { SandboxTools } from '@neevcloud/sdk/agent-tools'
+import { runAgent } from './agent.js'
 
 // Any OpenAI-compatible endpoint works; this defaults to NeevCloud inference.
 const model = createOpenAI({
@@ -16,6 +10,7 @@ const model = createOpenAI({
   apiKey: process.env.NEEV_MODEL_API_KEY,
 }).chat(process.env.NEEV_MODEL ?? 'glm-5-2')
 
+const neev = new Neev()
 const sandbox = await neev.sandboxes.create({ name: `ai-sdk-${Date.now().toString(36)}` })
 
 // The sandbox holds quota from here, so the try starts here -- waitUntilReady can
@@ -23,27 +18,12 @@ const sandbox = await neev.sandboxes.create({ name: `ai-sdk-${Date.now().toStrin
 try {
   await sandbox.waitUntilReady()
   console.log(`  sandbox ready: ${sandbox.name}`)
-
-  const { text } = await generateText({
-    model,
-    // Without a step limit the loop stops after the first tool call.
-    stopWhen: stepCountIs(8),
-    system: 'You have a Linux sandbox. Run commands rather than guessing.',
-    prompt:
-      'Write a file words.txt with five animal names one per line, then use ' +
-      'sort and head to print the alphabetically first one. Reply with that word only.',
-    tools: {
-      run: tool({
-        description: 'Run a shell command in the sandbox. State persists between calls.',
-        inputSchema: z.object({ command: z.string().describe('Shell command to run') }),
-        execute: async ({ command }) => {
-          const r = await sandbox.exec('sh', { args: ['-lc', command] })
-          return r.exitCode === 0 ? r.stdout || '(no output)' : `exit ${r.exitCode}: ${r.stderr}`
-        },
-      }),
-    },
+  const tools = new SandboxTools(sandbox, {
+    allowPreview: process.env.ALLOW_PREVIEW === '1',
+    allowRollback: process.env.ALLOW_ROLLBACK === '1',
+    allowProcesses: process.env.ALLOW_PROCESSES === '1',
   })
-  console.log(`\n  agent: ${text.trim().slice(0, 150)}`)
+  console.log(`\n  agent: ${(await runAgent(tools, model)).trim().slice(0, 200)}`)
 } finally {
   await sandbox.delete()
   console.log('\n  sandbox deleted')
