@@ -9,7 +9,10 @@ export const REQUIRED_ENV = ["NEEV_API_KEY", "NEEV_ORG_ID", "NEEV_PROJECT_ID"] a
 const TEMPLATE = "sb-ubuntu-26-04-docker";
 export const PROJECT_DIR = fileURLToPath(new URL("./sample-app", import.meta.url));
 export const REMOTE_DIR = "/workspace/sample-app";
-const VERSIONS = "docker version --format '{{.Server.Version}}' && docker compose version --short";
+// The daemon starts at boot, so give it a moment before the first docker call.
+const VERSIONS =
+  "for i in $(seq 30); do docker info >/dev/null 2>&1 && break; sleep 1; done; " +
+  "docker version --format '{{.Server.Version}}' && docker compose version --short";
 export const COMPOSE_UP = "docker compose --progress plain up -d --wait";
 export const RUN_TESTS = "docker compose run --rm tests";
 export const COMPOSE_DOWN = "docker compose down -v";

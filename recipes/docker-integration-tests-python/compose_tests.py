@@ -12,7 +12,9 @@ REQUIRED_ENV = ("NEEV_API_KEY", "NEEV_ORG_ID", "NEEV_PROJECT_ID")
 TEMPLATE = "sb-ubuntu-26-04-docker"
 PROJECT_DIR = Path(__file__).parent / "sample-app"
 REMOTE_DIR = "/workspace/sample-app"
-VERSIONS = "docker version --format '{{.Server.Version}}' && docker compose version --short"
+# The daemon starts at boot, so give it a moment before the first docker call.
+VERSIONS = ("for i in $(seq 30); do docker info >/dev/null 2>&1 && break; sleep 1; done; "
+            "docker version --format '{{.Server.Version}}' && docker compose version --short")
 COMPOSE_UP = "docker compose --progress plain up -d --wait"
 RUN_TESTS = "docker compose run --rm tests"
 COMPOSE_DOWN = "docker compose down -v"
