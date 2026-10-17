@@ -55,7 +55,7 @@ jobs:
           import json, os
           recipes = [
               {"name": "prompt-to-live-app-python", "lang": "python", "cmd": "python app_builder.py --keep 0"},
-              {"name": "prompt-to-live-app-js", "lang": "node", "cmd": "npm start -- --keep 0"},
+              {"name": "prompt-to-live-app-js", "lang": "node", "cmd": "npm start -- --keep 0.1"},
               {"name": "claude-code-over-mcp", "lang": "python", "cmd": "python simulate_agent.py"},
               {"name": "agent-session-report-python", "lang": "python", "cmd": "python session_report.py --out ../../report.md"},
               {"name": "injection-proof-agent-python", "lang": "python", "cmd": "python injection_demo.py"},
@@ -88,6 +88,12 @@ jobs:
               {"name": "agent-session-report-js", "lang": "node", "cmd": "npm start -- --out ../../report.md"},
               {"name": "pr-review-ci-python", "lang": "python", "cmd": "python review.py"},
               {"name": "pr-review-ci-js", "lang": "node", "cmd": "npm start"},
+              {"name": "docker-integration-tests-python", "lang": "python", "cmd": "python compose_tests.py --keep 0.1"},
+              {"name": "docker-integration-tests-js", "lang": "node", "cmd": "npm start -- --keep 0.1"},
+              {"name": "browser-qa-agent-python", "lang": "python", "cmd": "python browser_qa.py"},
+              {"name": "browser-qa-agent-js", "lang": "node", "cmd": "npm start"},
+              {"name": "bring-your-own-image-python", "lang": "python", "cmd": "python bring_your_own_image.py"},
+              {"name": "bring-your-own-image-js", "lang": "node", "cmd": "npm start"},
           ]
           for r in recipes:
               r["dir"] = f"recipes/{r['name']}"

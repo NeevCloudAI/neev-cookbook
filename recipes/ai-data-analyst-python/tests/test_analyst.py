@@ -22,12 +22,10 @@ class FakeClient:
         self.sandboxes = SimpleNamespace(create=create)
 
 
-def ready_sandbox(chart=PNG, pip_exit=0):
-    """A sandbox that records exec, uploads, egress updates and deletion; chart.png reads back as `chart`."""
-    sb = SimpleNamespace(name="data-analyst-1", execs=[], uploads=[], updates=[], deleted=False)
+def ready_sandbox(chart=PNG):
+    """A sandbox that records uploads and deletion; chart.png reads back as `chart`."""
+    sb = SimpleNamespace(name="data-analyst-1", uploads=[], deleted=False)
     sb.wait_until_ready = lambda timeout_ms=None: sb
-    sb.exec = lambda command, **kw: sb.execs.append(command) or SimpleNamespace(exit_code=pip_exit, stdout="", stderr="ERROR: no matching distribution")
-    sb.update = lambda params: sb.updates.append(params) or sb
 
     def read(path):
         if chart is None:
@@ -71,50 +69,23 @@ def test_the_bundled_sample_is_a_few_hundred_rows_of_csv():
     assert rows[0] == "month,city,category,orders,revenue_inr" and 200 < len(rows) < 1000
 
 
-def test_happy_path_installs_with_pypi_only_then_locks_egress_and_downloads_the_chart(tmp_path):
+def test_happy_path_uses_the_interpreter_template_with_no_egress_and_downloads_the_chart(tmp_path):
     sb, lines = ready_sandbox(), []
     client, session = FakeClient(sb), FakeSession()
     connect = connector(session)
     code = analyst.run("q", analyst.SAMPLE_CSV, tmp_path / "chart.png", client, finishing_model(), "m", connect, log=lines.append)
     assert code == 0
-    assert client.created[0]["allow_egress"] == ["pypi.org", "files.pythonhosted.org"]
-    assert client.created[0]["name"].startswith("data-analyst-")
-    assert sb.execs[0][:3] == ["python3", "-m", "pip"] and sb.execs[0][-2:] == ["pandas", "matplotlib"]
-    assert sb.updates == [{"egress": {"mode": "deny_all"}}]
+    created = client.created[0]
+    assert created["sandbox_template_id"] == "sb-ubuntu-26-04-interpreter"
+    assert created["egress"] == {"mode": "deny_all"} and "allow_egress" not in created
+    assert created["name"].startswith("data-analyst-")
+    assert [name for name, _ in session.calls] == ["interpreter_run", "fs_read"]
+    assert any(l.startswith("   Ready in ") for l in lines) and any(l.startswith("   Analysis took ") for l in lines)
     assert sb.uploads == [(analyst.SAMPLE_CSV, "data.csv")]
     assert connect.names == ["data-analyst-1"]
     assert (tmp_path / "chart.png").read_bytes() == PNG
     assert any("Mumbai leads." in l for l in lines)
     assert sb.deleted
-
-
-def test_egress_is_locked_before_the_data_is_uploaded(tmp_path):
-    sb, order = ready_sandbox(), []
-    sb.update = lambda params: order.append("lock") or sb
-    sb.files.upload_file = lambda local, remote: order.append("upload") or {"bytes_written": 1}
-    assert go(sb, tmp_path) == 0
-    assert order == ["lock", "upload"]
-
-
-def test_egress_is_locked_before_the_agent_runs(tmp_path):
-    sb = ready_sandbox()
-    seen = []
-
-    @contextlib.asynccontextmanager
-    async def connect(name):
-        seen.append(list(sb.updates))
-        yield FakeSession()
-
-    analyst.run("q", analyst.SAMPLE_CSV, tmp_path / "c.png", FakeClient(sb), finishing_model(), "m", connect, log=lambda *_: None)
-    assert seen == [[{"egress": {"mode": "deny_all"}}]]
-
-
-def test_failed_install_stops_before_the_agent_and_deletes(tmp_path):
-    sb, lines = ready_sandbox(pip_exit=1), []
-    model = finishing_model()
-    assert go(sb, tmp_path, model=model, lines=lines) == 1
-    assert model.requests == [] and sb.deleted
-    assert any("no matching distribution" in l for l in lines)
 
 
 def test_agent_failure_deletes_and_writes_no_chart(tmp_path):
@@ -133,10 +104,10 @@ def test_a_chart_that_is_not_a_png_fails_and_writes_nothing(tmp_path):
 def test_ctrl_c_part_way_deletes_the_sandbox_and_exits_130(tmp_path):
     sb = ready_sandbox()
 
-    def interrupted(command, **kw):
+    def interrupted(local, remote):
         raise KeyboardInterrupt
 
-    sb.exec = interrupted
+    sb.files.upload_file = interrupted
     assert go(sb, tmp_path) == 130 and sb.deleted
 
 

@@ -1,4 +1,4 @@
-// AI data analyst: an agent answers a question about a CSV by running pandas in a NeevCloud sandbox, and saves a chart.
+// AI data analyst: an agent answers a question about a CSV by running pandas in a NeevCloud Code Interpreter sandbox, and saves a chart.
 import { randomBytes } from "node:crypto";
 import { existsSync, writeFileSync } from "node:fs";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -12,12 +12,8 @@ const DEFAULT_MODEL = "glm-4-7";
 export const SAMPLE_CSV = fileURLToPath(new URL("data/sales.csv", import.meta.url));
 const DEFAULT_QUESTION = "Which cities and product categories bring in the most revenue, and how much do " +
   "October and November lift sales? Chart monthly revenue for the top cities.";
-// The only hosts pip needs: the package index and the file host it redirects to.
-const PYPI_HOSTS = ["pypi.org", "files.pythonhosted.org"];
-// The template's Python is managed by the OS, so pip needs --break-system-packages; --user keeps it out of system dirs.
-// No --quiet: the exec stream times out after 60s without output, and pip's progress lines keep it alive.
-const PIP_INSTALL = ["python3", "-m", "pip", "install", "--user", "--break-system-packages",
-  "--disable-pip-version-check", "--no-warn-script-location", "--root-user-action=ignore", "pandas", "matplotlib"];
+// Stateful Python kernels with numpy, pandas and matplotlib preinstalled, so nothing is installed at run time.
+const TEMPLATE = "sb-ubuntu-26-04-interpreter";
 const PNG_SIGNATURE = [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a];
 
 export interface NeevLike { sandboxes: { create(params: Record<string, unknown>): Promise<any> } }
@@ -45,7 +41,10 @@ export function missingEnv(env: Record<string, string | undefined>): string[] {
 // isPng checks the first bytes of a file against the PNG signature.
 const isPng = (data: Uint8Array) => PNG_SIGNATURE.every((b, i) => data[i] === b);
 
-// run creates a sandbox, installs pandas, has the agent analyse the CSV over MCP, downloads the chart, and always deletes.
+// seconds is the time since `since` for the progress lines.
+const seconds = (since: number) => ((Date.now() - since) / 1000).toFixed(1);
+
+// run creates a Code Interpreter sandbox, has the agent analyse the CSV over MCP, downloads the chart, and always deletes.
 export async function run(
   question: string, csvPath: string, outPath: string, neev: NeevLike, modelClient: ModelLike, model: string, connect: Connect,
   opts: { log?: (s: string) => void; signal?: AbortSignal } = {},
@@ -53,24 +52,22 @@ export async function run(
   const { log = console.log, signal } = opts;
   let sandbox: any;
   try {
-    log("1. Creating a sandbox that can reach only pypi.org and files.pythonhosted.org...");
-    sandbox = await neev.sandboxes.create({ name: `data-analyst-js-${randomBytes(4).toString("hex")}`, allowEgress: PYPI_HOSTS });
+    log("1. Creating a Code Interpreter sandbox with no internet access...");
+    let started = Date.now();
+    // No egress at all from the start: code the model writes can reach no host.
+    sandbox = await neev.sandboxes.create({
+      name: `data-analyst-js-${randomBytes(4).toString("hex")}`, sandbox_template_id: TEMPLATE, egress: { mode: "deny_all" },
+    });
     await sandbox.waitUntilReady({ timeoutMs: 300_000 });
-    log("2. Installing pandas and matplotlib...");
-    const installed = await sandbox.exec(PIP_INSTALL, { timeoutMs: 240_000, signal });
-    if (installed.exitCode !== 0) {
-      log(`Failed: pip install exited ${installed.exitCode}: ${installed.stderr.trim().slice(-300)}`);
-      return 1;
-    }
-    // Lock egress before the data arrives: code the model writes can then reach no host at all.
-    await sandbox.update({ egress: { mode: "deny_all" } });
-    log("3. Internet access removed. Uploading the data...");
+    log(`   Ready in ${seconds(started)}s. Uploading the data...`);
     await sandbox.files.uploadFile(csvPath, "data.csv");
-    log(`4. Asking ${model}: ${question}`);
+    log(`2. Asking ${model}: ${question}`);
+    started = Date.now();
     const session = await connect(sandbox.name);
     let findings: string;
     try { findings = await analyse(session, modelClient, model, question, { log, signal }); } finally { await session.close(); }
-    log(`5. Downloading ${CHART}...`);
+    log(`   Analysis took ${seconds(started)}s`);
+    log(`3. Downloading ${CHART}...`);
     const chart: Uint8Array = await sandbox.files.read(CHART);
     if (!isPng(chart)) {
       log(`Failed: the agent's ${CHART} is not a PNG image`);
@@ -78,7 +75,7 @@ export async function run(
     }
     writeFileSync(outPath, chart);
     log(`   Saved ${outPath} (${Math.floor(chart.length / 1024)} KB)`);
-    log("6. Findings:");
+    log("4. Findings:");
     log(findings);
     return 0;
   } catch (e) {
