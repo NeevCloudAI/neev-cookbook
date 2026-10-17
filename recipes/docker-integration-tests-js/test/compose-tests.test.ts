@@ -1,16 +1,16 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { COMPOSE_DOWN, COMPOSE_UP, composeEvent, countResults, LineBuffer, missingEnv, PROJECT_DIR, projectFiles, REMOTE_DIR, RUN_TESTS, run } from "../compose-tests.ts";
+import { COMPOSE_DOWN, COMPOSE_UP, composeEvent, countResults, LineBuffer, missingEnv, parseKeep, PROJECT_DIR, projectFiles, REMOTE_DIR, RUN_TESTS, run } from "../compose-tests.ts";
 import { fakeSandbox, neevWith, script, TESTS_FAIL } from "./fakes.ts";
 
 // counter returns a clock that advances by step milliseconds on every read.
 const counter = (step = 1_000) => { let t = 0; return () => (t += step); };
 
-async function runWith(sb: any, step?: number) {
-  const lines: string[] = [];
+async function runWith(sb: any, step?: number, keepMinutes = 0) {
+  const lines: string[] = [], waited: number[] = [];
   const neev = neevWith(sb);
-  const code = await run(neev, { log: (l) => lines.push(l), clock: counter(step), wait: async () => {} });
-  return { code, lines, neev };
+  const code = await run(neev, { log: (l) => lines.push(l), clock: counter(step), wait: async (ms) => { waited.push(ms); }, keepMinutes });
+  return { code, lines, neev, waited };
 }
 
 test("missingEnv names every missing variable", () => {
@@ -18,7 +18,7 @@ test("missingEnv names every missing variable", () => {
 });
 
 test("the sample app is the compose file, the service and its tests", () => {
-  assert.deepEqual([...projectFiles(PROJECT_DIR).keys()], ["api/server.ts", "compose.yaml", "tests/api.test.ts"]);
+  assert.deepEqual([...projectFiles(PROJECT_DIR).keys()], ["api/index.html", "api/server.ts", "compose.yaml", "tests/api.test.ts"]);
 });
 
 test("LineBuffer joins chunks split mid-line", () => {
@@ -101,4 +101,33 @@ test("Ctrl+C stops the run, deletes the sandbox and exits 130", async () => {
   const wait = async () => { ac.abort(); throw new Error("aborted"); };
   assert.equal(await run(neevWith(sb), { log: () => {}, clock: counter(), wait, signal: ac.signal }), 130);
   assert.ok(sb.deleted);
+});
+
+test("a passing run opens the app on a preview URL", async () => {
+  const sb = fakeSandbox(script());
+  const { code, lines } = await runWith(sb);
+  assert.equal(code, 0);
+  assert.deepEqual(sb.urls, [3000]);
+  assert.ok(lines.includes("   https://3000-compose-tests-1.preview.example"));
+});
+
+test("--keep holds the app online before teardown", async () => {
+  const sb = fakeSandbox(script());
+  const { code, lines, waited } = await runWith(sb, undefined, 2);
+  assert.equal(code, 0);
+  assert.ok(waited.includes(120_000));
+  assert.ok(lines.includes("   Keeping it up for 2 minutes. Press Ctrl+C to stop sooner."));
+  assert.equal(sb.started.at(-1)[0], COMPOSE_DOWN);
+});
+
+test("failing tests open no preview URL", async () => {
+  const sb = fakeSandbox(script({ tests: [TESTS_FAIL, 1] }));
+  await runWith(sb);
+  assert.deepEqual(sb.urls, []);
+});
+
+test("parseKeep defaults to 10 minutes and refuses a negative value", () => {
+  assert.equal(parseKeep([]), 10);
+  assert.equal(parseKeep(["--keep", "0"]), 0);
+  assert.throws(() => parseKeep(["--keep=-1"]), /--keep must be 0 or more minutes/);
 });

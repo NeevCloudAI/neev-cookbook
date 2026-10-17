@@ -4,6 +4,7 @@ import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { setTimeout as sleep } from "node:timers/promises";
 import { fileURLToPath, pathToFileURL } from "node:url";
+import { parseArgs } from "node:util";
 
 export const REQUIRED_ENV = ["NEEV_API_KEY", "NEEV_ORG_ID", "NEEV_PROJECT_ID"] as const;
 const TEMPLATE = "sb-ubuntu-26-04-docker";
@@ -18,6 +19,7 @@ export const RUN_TESTS = "docker compose run --rm tests";
 export const COMPOSE_DOWN = "docker compose down -v";
 const POLL_MS = 2_000;
 const TAIL_LINES = 15;
+const APP_PORT = 3000;
 
 export interface NeevLike { sandboxes: { create(params: Record<string, unknown>): Promise<any> } }
 export interface StepOptions { log: (s: string) => void; clock: () => number; wait: (ms: number) => Promise<void>; signal?: AbortSignal }
@@ -92,8 +94,8 @@ export async function runStep(sandbox: any, command: string, timeoutMs: number, 
 }
 
 // run creates a Docker sandbox, runs the sample app's integration tests in it, tears down, and always deletes it.
-export async function run(neev: NeevLike, opts: Partial<StepOptions> = {}): Promise<number> {
-  const { log = console.log, clock = Date.now, signal } = opts;
+export async function run(neev: NeevLike, opts: Partial<StepOptions> & { keepMinutes?: number } = {}): Promise<number> {
+  const { log = console.log, clock = Date.now, signal, keepMinutes = 0 } = opts;
   const wait = opts.wait ?? ((ms: number) => sleep(ms, undefined, { signal }));
   const step: StepOptions = { log, clock, wait, signal };
   const seconds = (since: number) => `${Math.round((clock() - since) / 1000)}s`;
@@ -132,7 +134,16 @@ export async function run(neev: NeevLike, opts: Partial<StepOptions> = {}): Prom
     const counts = countResults(lines);
     if (counts) log(`   ${counts[0]} passed, ${counts[1]} failed in ${seconds(start)}`);
 
-    log("5. Tearing it all down (docker compose down -v)...");
+    if (testsOk) {
+      log("5. Opening the app on a public preview URL...");
+      log(`   ${await sandbox.getUrl({ port: APP_PORT })}`);
+      if (keepMinutes > 0) {
+        log(`   Keeping it up for ${keepMinutes} minutes. Press Ctrl+C to stop sooner.`);
+        await wait(keepMinutes * 60_000);
+      }
+    }
+
+    log("6. Tearing it all down (docker compose down -v)...");
     start = clock();
     const [down] = await runStep(sandbox, COMPOSE_DOWN, 120_000, () => {}, step);
     if (down) log(`   Containers and volumes removed in ${seconds(start)}`);
@@ -149,15 +160,25 @@ export async function run(neev: NeevLike, opts: Partial<StepOptions> = {}): Prom
   }
 }
 
-// main checks the environment and runs the recipe with Ctrl+C wired to cleanup.
+// parseKeep reads --keep (minutes to keep the app online after the tests) from the command line.
+export function parseKeep(argv: string[]): number {
+  const { values } = parseArgs({ args: argv, options: { keep: { type: "string", default: "10" } } });
+  const keep = Number(values.keep);
+  if (!Number.isFinite(keep) || keep < 0) throw new Error(`--keep must be 0 or more minutes, got "${values.keep}"`);
+  return keep;
+}
+
+// main checks the arguments and the environment and runs the recipe with Ctrl+C wired to cleanup.
 async function main(): Promise<number> {
+  let keepMinutes: number;
+  try { keepMinutes = parseKeep(process.argv.slice(2)); } catch (e) { console.error((e as Error).message); return 2; }
   const missing = missingEnv(process.env);
   if (missing.length) { console.error(`Missing environment variables: ${missing.join(", ")}. See README.md.`); return 2; }
   const { Neev } = await import("@neevcloud/sdk");
   const ac = new AbortController();
   // Keep the handler for repeated presses, so a second Ctrl+C cannot skip the cleanup.
   process.on("SIGINT", () => ac.abort());
-  return run(new Neev() as unknown as NeevLike, { signal: ac.signal });
+  return run(new Neev() as unknown as NeevLike, { signal: ac.signal, keepMinutes });
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {

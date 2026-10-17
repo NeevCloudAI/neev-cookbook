@@ -6,6 +6,10 @@ There is also a [TypeScript version](../browser-qa-agent-js).
 
 <!-- run GIF: assets/runs/browser-qa-agent-python.gif, recorded on prod after v0.9.0 -->
 
+<p align="center">
+  <img src="../../assets/browser-qa-agent.png" alt="The sample site in phone, tablet and desktop screenshots taken in the sandbox, with the QA report: a broken link and a JavaScript error found" width="720">
+</p>
+
 ## Run it
 
 You need Python 3.11+, a **Sandboxes** key ([create a key](https://docs.ai.neevcloud.com/getting-started/create-api-key)), and your [organization and project IDs](https://docs.ai.neevcloud.com/getting-started/org-and-project#find-your-organization-id-and-project-id).

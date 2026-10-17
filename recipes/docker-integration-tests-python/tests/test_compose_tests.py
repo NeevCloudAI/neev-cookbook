@@ -4,17 +4,18 @@ import compose_tests
 from tests.fakes import TESTS_FAIL, FakeClient, FakeSandbox, script
 
 
-def run(sandbox, lines=None, clock=None):
+def run(sandbox, lines=None, clock=None, keep=0, slept=None):
     clock = clock or itertools.count().__next__
-    return compose_tests.run(FakeClient(sandbox), log=(lines if lines is not None else []).append, clock=clock, sleep=lambda s: None)
+    sleep = (slept if slept is not None else []).append
+    return compose_tests.run(FakeClient(sandbox), keep, log=(lines if lines is not None else []).append, clock=clock, sleep=sleep)
 
 
 def test_missing_env_names_every_missing_variable():
     assert compose_tests.missing_env({"NEEV_API_KEY": "k"}) == ["NEEV_ORG_ID", "NEEV_PROJECT_ID"]
 
 
-def test_sample_app_is_the_compose_file_service_and_tests():
-    assert list(compose_tests.project_files(compose_tests.PROJECT_DIR)) == ["api/server.ts", "compose.yaml", "tests/api.test.ts"]
+def test_sample_app_is_the_compose_file_service_page_and_tests():
+    assert list(compose_tests.project_files(compose_tests.PROJECT_DIR)) == ["api/index.html", "api/server.ts", "compose.yaml", "tests/api.test.ts"]
 
 
 def test_line_buffer_joins_chunks_split_mid_line():
@@ -51,7 +52,25 @@ def test_happy_path_uploads_runs_up_tests_down_and_deletes():
     assert "   Ready in 1s: Docker 29.1.3, Compose 2.40.3" in lines
     assert "   | (pass) health check answers [3.93ms]" in lines
     assert any(l.startswith("   2 passed, 0 failed") for l in lines)
+    assert sb.urls == [3000]
+    assert "   https://3000-compose-tests-1.preview.example" in lines
     assert sb.deleted
+
+
+def test_keep_holds_the_app_online_before_teardown():
+    sb, lines, slept = FakeSandbox(script()), [], []
+    assert run(sb, lines, keep=2, slept=slept) == 0
+    assert 120 in slept
+    assert "   Keeping it up for 2 minutes. Press Ctrl+C to stop sooner." in lines
+    assert sb.processes.started[-1][0] == compose_tests.COMPOSE_DOWN
+
+
+def test_negative_keep_is_refused(capsys):
+    try:
+        compose_tests.main(["--keep", "-1"])
+    except SystemExit as e:
+        assert e.code == 2
+    assert "--keep must be 0 or more minutes" in capsys.readouterr().err
 
 
 def test_failing_tests_exit_1_but_still_tear_down_and_delete():
@@ -59,6 +78,7 @@ def test_failing_tests_exit_1_but_still_tear_down_and_delete():
     assert run(sb, lines) == 1
     assert any(l.startswith("   1 passed, 1 failed") for l in lines)
     assert "   > (fail) creating a note [8ms]" in lines
+    assert sb.urls == []
     assert sb.processes.started[-1][0] == compose_tests.COMPOSE_DOWN
     assert sb.deleted
 

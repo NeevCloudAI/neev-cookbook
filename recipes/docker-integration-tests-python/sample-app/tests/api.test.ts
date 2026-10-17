@@ -28,6 +28,14 @@ test("the second read is served from the Redis cache", async () => {
   expect(await second.json()).toEqual({ id, text: "cache me" });
 });
 
+test("the web page and its data are served", async () => {
+  expect(await (await fetch(`${API}/`)).text()).toContain("<title>Notes</title>");
+  const status = await (await fetch(`${API}/status`)).json();
+  expect(status.postgres).toMatch(/^17/);
+  expect(status.redis).toMatch(/^7/);
+  expect((await (await fetch(`${API}/notes`)).json()).length).toBeGreaterThan(0);
+});
+
 test("an unknown note is a 404", async () => {
   expect((await fetch(`${API}/notes/999999`)).status).toBe(404);
 });

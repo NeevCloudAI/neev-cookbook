@@ -4,7 +4,9 @@ Ask a question about a CSV in plain English. An AI agent answers it by running p
 
 There is also a [TypeScript version](../ai-data-analyst-js).
 
-<!-- run GIF: assets/runs/ai-data-analyst-python.gif, recorded on prod after v0.9.0 -->
+<p align="center">
+  <img src="../../assets/runs/ai-data-analyst-python.gif" alt="A real run of this recipe, recorded in a terminal" width="720">
+</p>
 
 <p align="center">
   <img src="../../assets/ai-data-analyst.png" alt="Monthly revenue for the top cities, charted by the agent from the bundled sample data" width="640">

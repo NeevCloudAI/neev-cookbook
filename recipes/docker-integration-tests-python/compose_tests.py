@@ -1,6 +1,7 @@
 """Disposable integration tests: bring up an app with real Postgres and Redis in a sandbox, test it, tear it all down."""
 from __future__ import annotations
 
+import argparse
 import os
 import re
 import secrets
@@ -20,6 +21,7 @@ RUN_TESTS = "docker compose run --rm tests"
 COMPOSE_DOWN = "docker compose down -v"
 POLL_S = 2
 TAIL_LINES = 15
+APP_PORT = 3000
 
 
 def missing_env(environ) -> list[str]:
@@ -98,8 +100,8 @@ def run_step(sandbox, command: str, timeout_s: float, show, log, clock, sleep) -
     return exit_code == 0, lines
 
 
-def run(client, log=print, clock=time.monotonic, sleep=time.sleep) -> int:
-    """Creates a Docker sandbox, runs the sample app's integration tests in it, tears down, and always deletes it."""
+def run(client, keep_minutes: float = 0, log=print, clock=time.monotonic, sleep=time.sleep) -> int:
+    """Creates a Docker sandbox, tests the sample app in it, shows it on a preview URL, tears down, always deletes it."""
     sandbox = None
     try:
         log(f"1. Creating a sandbox from the {TEMPLATE} template...")
@@ -144,7 +146,14 @@ def run(client, log=print, clock=time.monotonic, sleep=time.sleep) -> int:
         if counts:
             log(f"   {counts[0]} passed, {counts[1]} failed in {clock() - start:.0f}s")
 
-        log("5. Tearing it all down (docker compose down -v)...")
+        if tests_ok:
+            log("5. Opening the app on a public preview URL...")
+            log(f"   {sandbox.get_url(APP_PORT)}")
+            if keep_minutes > 0:
+                log(f"   Keeping it up for {keep_minutes:g} minutes. Press Ctrl+C to stop sooner.")
+                sleep(keep_minutes * 60)
+
+        log("6. Tearing it all down (docker compose down -v)...")
         start = clock()
         down, _ = run_step(sandbox, COMPOSE_DOWN, 120, lambda _: None, log, clock, sleep)
         if down:
@@ -161,8 +170,13 @@ def run(client, log=print, clock=time.monotonic, sleep=time.sleep) -> int:
             log("   Sandbox deleted.")
 
 
-def main() -> int:
-    """Checks the environment and runs the recipe."""
+def main(argv=None) -> int:
+    """Parses arguments, checks the environment and runs the recipe."""
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--keep", type=float, default=10, help="minutes to keep the app online after the tests (default 10)")
+    args = parser.parse_args(argv)
+    if args.keep < 0:
+        parser.error("--keep must be 0 or more minutes")
     missing = missing_env(os.environ)
     if missing:
         print(f"Missing environment variables: {', '.join(missing)}. See README.md.", file=sys.stderr)
@@ -170,7 +184,7 @@ def main() -> int:
     from neevai import NeevAI
 
     with NeevAI() as client:
-        return run(client)
+        return run(client, args.keep)
 
 
 if __name__ == "__main__":

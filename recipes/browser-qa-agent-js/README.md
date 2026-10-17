@@ -6,6 +6,10 @@ This is the TypeScript version of the [Python recipe](../browser-qa-agent-python
 
 <!-- run GIF: assets/runs/browser-qa-agent-js.gif, recorded on prod after v0.9.0 -->
 
+<p align="center">
+  <img src="../../assets/browser-qa-agent.png" alt="The sample site in phone, tablet and desktop screenshots taken in the sandbox, with the QA report: a broken link and a JavaScript error found" width="720">
+</p>
+
 ## Run it
 
 You need Node 20.3+, a **Sandboxes** key ([create a key](https://docs.ai.neevcloud.com/getting-started/create-api-key)), and your [organization and project IDs](https://docs.ai.neevcloud.com/getting-started/org-and-project#find-your-organization-id-and-project-id).

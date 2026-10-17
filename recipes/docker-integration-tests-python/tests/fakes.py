@@ -43,6 +43,7 @@ class FakeSandbox:
     def __init__(self, script, versions="29.1.3\n2.40.3+ds1-0ubuntu1\n"):
         self.name = "compose-tests-1"
         self.versions = versions
+        self.urls = []
         self.files_written = {}
         self.deleted = False
         self.processes = FakeProcesses(script)
@@ -53,6 +54,10 @@ class FakeSandbox:
 
     def exec(self, argv):
         return SimpleNamespace(stdout=self.versions, exit_code=0 if self.versions else 1)
+
+    def get_url(self, port):
+        self.urls.append(port)
+        return f"https://{port}-compose-tests-1.preview.example"
 
     def delete(self):
         self.deleted = True

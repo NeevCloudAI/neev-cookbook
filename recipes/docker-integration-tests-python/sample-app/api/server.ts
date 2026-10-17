@@ -8,8 +8,15 @@ await db`CREATE TABLE IF NOT EXISTS notes (id serial PRIMARY KEY, text text NOT 
 Bun.serve({
   port: 3000,
   routes: {
+    "/": new Response(Bun.file(`${import.meta.dir}/index.html`)),
     "/health": () => new Response("ok"),
+    "/status": async () => {
+      const [{ version }] = await db`SELECT current_setting('server_version') AS version`;
+      const info = String(await cache.send("INFO", ["server"]));
+      return Response.json({ bun: Bun.version, postgres: version, redis: info.match(/redis_version:(\S+)/)?.[1] });
+    },
     "/notes": {
+      GET: async () => Response.json(await db`SELECT id, text FROM notes ORDER BY id`),
       POST: async (req) => {
         const { text } = await req.json();
         if (!text) return Response.json({ error: "text is required" }, { status: 400 });

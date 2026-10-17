@@ -18,6 +18,8 @@ export function script(over: Partial<{ up: Script[string]; tests: Script[string]
 export function fakeSandbox(s: Script) {
   const sb: any = { name: "compose-tests-1", written: new Map<string, unknown>(), started: [] as [string, string][], killed: [] as string[], deleted: false };
   sb.waitUntilReady = async () => sb;
+  sb.urls = [] as number[];
+  sb.getUrl = async ({ port }: { port: number }) => { sb.urls.push(port); return `https://${port}-compose-tests-1.preview.example`; };
   sb.exec = async () => ({ stdout: "29.1.3\n2.40.3+ds1-0ubuntu1\n", stderr: "", exitCode: 0 });
   sb.files = { write: async (path: string, data: unknown) => { sb.written.set(path, data); } };
   sb.processes = {
