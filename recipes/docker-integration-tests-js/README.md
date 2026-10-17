@@ -74,6 +74,7 @@ The script exits 0 when every test passes and the teardown succeeds, and 1 other
 
 - There is no bridge network: every container must use `network_mode: host`, and services reach each other on `127.0.0.1`. Two services cannot listen on the same port. If you build an image, also set `build: network: host`.
 - The sandbox can pull images from Docker Hub and GitHub Container Registry by default. Anything else your build needs, such as a package index for `pip install` or `npm install`, must be added to the sandbox's egress allow-list ([Internet access](https://docs.ai.neevcloud.com/agentic-studio/overview/internet-access)). The sample API is written for Bun, which has Postgres and Redis clients built in, so it needs no package installs.
+- Anyone with the preview URL can use the app until it is torn down. Pass `--keep 0` to skip the preview.
 - Container memory limits (`--memory`, `mem_limit`) are not enforced; all containers share the sandbox's own memory.
 - Each sandbox starts with no images, so every run pulls them again. Smaller images (the `-alpine` variants here) start faster.
 - Long steps run as background processes that the script polls, rather than one long `exec` call, so a quiet step such as an image pull never leaves a request waiting with no output.

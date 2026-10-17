@@ -4,9 +4,7 @@ Ask a question about a CSV in plain English. An AI agent answers it by running p
 
 This is the TypeScript version of the [Python recipe](../ai-data-analyst-python): your code is TypeScript, and the analysis the agent writes runs as Python inside the sandbox.
 
-<p align="center">
-  <img src="../../assets/runs/ai-data-analyst-js.gif" alt="A real run of this recipe, recorded in a terminal" width="720">
-</p>
+<!-- run GIF: assets/runs/ai-data-analyst-js.gif, recorded on prod after v0.9.0 -->
 
 <p align="center">
   <img src="../../assets/ai-data-analyst-js.png" alt="Monthly revenue for the top cities, charted by the agent from the bundled sample data" width="640">

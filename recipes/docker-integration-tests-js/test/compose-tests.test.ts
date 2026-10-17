@@ -6,7 +6,7 @@ import { fakeSandbox, neevWith, script, TESTS_FAIL } from "./fakes.ts";
 // counter returns a clock that advances by step milliseconds on every read.
 const counter = (step = 1_000) => { let t = 0; return () => (t += step); };
 
-async function runWith(sb: any, step?: number, keepMinutes = 0) {
+async function runWith(sb: any, step?: number, keepMinutes = 1) {
   const lines: string[] = [], waited: number[] = [];
   const neev = neevWith(sb);
   const code = await run(neev, { log: (l) => lines.push(l), clock: counter(step), wait: async (ms) => { waited.push(ms); }, keepMinutes });
@@ -118,6 +118,13 @@ test("--keep holds the app online before teardown", async () => {
   assert.ok(waited.includes(120_000));
   assert.ok(lines.includes("   Keeping it up for 2 minutes. Press Ctrl+C to stop sooner."));
   assert.equal(sb.started.at(-1)[0], COMPOSE_DOWN);
+});
+
+test("--keep 0 skips the preview", async () => {
+  const sb = fakeSandbox(script());
+  assert.equal((await runWith(sb, undefined, 0)).code, 0);
+  assert.deepEqual(sb.urls, []);
+  assert.ok(sb.deleted);
 });
 
 test("failing tests open no preview URL", async () => {

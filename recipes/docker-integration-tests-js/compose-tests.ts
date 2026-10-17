@@ -134,13 +134,11 @@ export async function run(neev: NeevLike, opts: Partial<StepOptions> & { keepMin
     const counts = countResults(lines);
     if (counts) log(`   ${counts[0]} passed, ${counts[1]} failed in ${seconds(start)}`);
 
-    if (testsOk) {
+    if (testsOk && keepMinutes > 0) {
       log("5. Opening the app on a public preview URL...");
       log(`   ${await sandbox.getUrl({ port: APP_PORT })}`);
-      if (keepMinutes > 0) {
-        log(`   Keeping it up for ${keepMinutes} minutes. Press Ctrl+C to stop sooner.`);
-        await wait(keepMinutes * 60_000);
-      }
+      log(`   Keeping it up for ${keepMinutes} minutes. Press Ctrl+C to stop sooner.`);
+      await wait(keepMinutes * 60_000);
     }
 
     log("6. Tearing it all down (docker compose down -v)...");

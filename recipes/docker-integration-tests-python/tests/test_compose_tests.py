@@ -1,10 +1,12 @@
 import itertools
 
+import pytest
+
 import compose_tests
 from tests.fakes import TESTS_FAIL, FakeClient, FakeSandbox, script
 
 
-def run(sandbox, lines=None, clock=None, keep=0, slept=None):
+def run(sandbox, lines=None, clock=None, keep=1, slept=None):
     clock = clock or itertools.count().__next__
     sleep = (slept if slept is not None else []).append
     return compose_tests.run(FakeClient(sandbox), keep, log=(lines if lines is not None else []).append, clock=clock, sleep=sleep)
@@ -40,7 +42,7 @@ def test_count_results_reads_the_bun_summary_or_none():
 def test_happy_path_uploads_runs_up_tests_down_and_deletes():
     sb, lines = FakeSandbox(script()), []
     client = FakeClient(sb)
-    code = compose_tests.run(client, log=lines.append, clock=itertools.count().__next__, sleep=lambda s: None)
+    code = compose_tests.run(client, 1, log=lines.append, clock=itertools.count().__next__, sleep=lambda s: None)
     assert code == 0
     assert client.created[0]["sandbox_template_id"] == "sb-ubuntu-26-04-docker"
     assert client.created[0]["name"].startswith("compose-tests-")
@@ -65,12 +67,19 @@ def test_keep_holds_the_app_online_before_teardown():
     assert sb.processes.started[-1][0] == compose_tests.COMPOSE_DOWN
 
 
-def test_negative_keep_is_refused(capsys):
-    try:
-        compose_tests.main(["--keep", "-1"])
-    except SystemExit as e:
-        assert e.code == 2
+@pytest.mark.parametrize("keep", ["-1", "nan", "inf"])
+def test_a_bad_keep_is_refused(capsys, keep):
+    with pytest.raises(SystemExit) as e:
+        compose_tests.main(["--keep", keep])
+    assert e.value.code == 2
     assert "--keep must be 0 or more minutes" in capsys.readouterr().err
+
+
+def test_keep_0_skips_the_preview():
+    sb, lines = FakeSandbox(script()), []
+    assert run(sb, lines, keep=0) == 0
+    assert sb.urls == []
+    assert sb.deleted
 
 
 def test_failing_tests_exit_1_but_still_tear_down_and_delete():

@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import argparse
+import math
 import os
 import re
 import secrets
@@ -146,12 +147,11 @@ def run(client, keep_minutes: float = 0, log=print, clock=time.monotonic, sleep=
         if counts:
             log(f"   {counts[0]} passed, {counts[1]} failed in {clock() - start:.0f}s")
 
-        if tests_ok:
+        if tests_ok and keep_minutes > 0:
             log("5. Opening the app on a public preview URL...")
             log(f"   {sandbox.get_url(APP_PORT)}")
-            if keep_minutes > 0:
-                log(f"   Keeping it up for {keep_minutes:g} minutes. Press Ctrl+C to stop sooner.")
-                sleep(keep_minutes * 60)
+            log(f"   Keeping it up for {keep_minutes:g} minutes. Press Ctrl+C to stop sooner.")
+            sleep(keep_minutes * 60)
 
         log("6. Tearing it all down (docker compose down -v)...")
         start = clock()
@@ -175,7 +175,7 @@ def main(argv=None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--keep", type=float, default=10, help="minutes to keep the app online after the tests (default 10)")
     args = parser.parse_args(argv)
-    if args.keep < 0:
+    if not math.isfinite(args.keep) or args.keep < 0:
         parser.error("--keep must be 0 or more minutes")
     missing = missing_env(os.environ)
     if missing:
