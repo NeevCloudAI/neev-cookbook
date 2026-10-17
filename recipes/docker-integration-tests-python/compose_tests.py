@@ -106,7 +106,10 @@ def run(client, log=print, clock=time.monotonic, sleep=time.sleep) -> int:
         start = clock()
         sandbox = client.sandboxes.create({"name": f"compose-tests-{secrets.token_hex(4)}", "sandbox_template_id": TEMPLATE})
         sandbox.wait_until_ready(timeout_ms=300_000)
-        docker, compose = sandbox.exec(["sh", "-c", VERSIONS]).stdout.split()
+        versions = sandbox.exec(["sh", "-c", VERSIONS]).stdout.split()
+        if len(versions) != 2:
+            raise RuntimeError("Docker isn't answering in the sandbox; try again in a minute")
+        docker, compose = versions
         compose = compose.split("+")[0]  # distro builds append a suffix, e.g. 2.40.3+ds1-0ubuntu1
         log(f"   Ready in {clock() - start:.0f}s: Docker {docker}, Compose {compose}")
 

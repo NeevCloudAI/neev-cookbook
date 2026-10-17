@@ -103,7 +103,9 @@ export async function run(neev: NeevLike, opts: Partial<StepOptions> = {}): Prom
     let start = clock();
     sandbox = await neev.sandboxes.create({ name: `compose-tests-${randomBytes(4).toString("hex")}`, sandbox_template_id: TEMPLATE });
     await sandbox.waitUntilReady({ timeoutMs: 300_000 });
-    const [docker, compose] = (await sandbox.exec(["sh", "-c", VERSIONS], { signal })).stdout.split(/\s+/);
+    const versions = (await sandbox.exec(["sh", "-c", VERSIONS], { signal })).stdout.trim().split(/\s+/);
+    if (versions.length !== 2) throw new Error("Docker isn't answering in the sandbox; try again in a minute");
+    const [docker, compose] = versions;
     // Distro builds append a suffix, e.g. 2.40.3+ds1-0ubuntu1.
     log(`   Ready in ${seconds(start)}: Docker ${docker}, Compose ${compose.split("+")[0]}`);
 

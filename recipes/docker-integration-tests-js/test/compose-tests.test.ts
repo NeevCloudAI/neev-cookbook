@@ -67,6 +67,16 @@ test("failing tests exit 1 but still tear down and delete", async () => {
   assert.ok(sb.deleted);
 });
 
+test("a daemon that never answers fails clearly and deletes", async () => {
+  const sb = fakeSandbox(script());
+  sb.exec = async () => ({ stdout: "", stderr: "Cannot connect to the Docker daemon", exitCode: 1 });
+  const { code, lines } = await runWith(sb);
+  assert.equal(code, 1);
+  assert.ok(lines.some((l) => l.includes("Docker isn't answering in the sandbox")));
+  assert.deepEqual(sb.started, []);
+  assert.ok(sb.deleted);
+});
+
 test("a compose up failure skips the tests and shows why", async () => {
   const sb = fakeSandbox(script({ up: [["Error response from daemon: pull access denied\n"], 1] }));
   const { code, lines } = await runWith(sb);

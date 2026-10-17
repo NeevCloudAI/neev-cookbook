@@ -63,6 +63,14 @@ def test_failing_tests_exit_1_but_still_tear_down_and_delete():
     assert sb.deleted
 
 
+def test_a_daemon_that_never_answers_fails_clearly_and_deletes():
+    sb, lines = FakeSandbox(script(), versions=""), []
+    assert run(sb, lines) == 1
+    assert any("Docker isn't answering in the sandbox" in l for l in lines)
+    assert sb.processes.started == []
+    assert sb.deleted
+
+
 def test_compose_up_failure_skips_the_tests_and_shows_why():
     sb, lines = FakeSandbox(script(up=(["Error response from daemon: pull access denied\n"], 1))), []
     assert run(sb, lines) == 1
