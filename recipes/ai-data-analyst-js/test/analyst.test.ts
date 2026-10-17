@@ -38,43 +38,22 @@ test("the bundled sample is a few hundred rows of CSV", () => {
   assert.ok(rows.length > 200 && rows.length < 1000);
 });
 
-test("happy path: installs from PyPI only, locks egress, then downloads the chart", async () => {
-  const sb = fakeSandbox(); const neev = fakeNeev(sb); const c = connector();
+test("happy path: uses the interpreter template with no egress, then downloads the chart", async () => {
+  const sb = fakeSandbox(); const session = fakeSession(); const neev = fakeNeev(sb); const c = connector(session);
   const { code, out, lines } = await go(sb, { neev, connect: c.connect });
   assert.equal(code, 0, lines.join("\n"));
-  assert.deepEqual(neev.created[0].allowEgress, ["pypi.org", "files.pythonhosted.org"]);
+  assert.equal(neev.created[0].sandbox_template_id, "sb-ubuntu-26-04-interpreter");
+  assert.deepEqual(neev.created[0].egress, { mode: "deny_all" });
+  assert.equal(neev.created[0].allowEgress, undefined);
   assert.match(neev.created[0].name, /^data-analyst-js-[0-9a-f]{8}$/);
-  assert.deepEqual(sb.execs[0].slice(0, 3), ["python3", "-m", "pip"]);
-  assert.deepEqual(sb.execs[0].slice(-2), ["pandas", "matplotlib"]);
-  assert.deepEqual(sb.updates, [{ egress: { mode: "deny_all" } }]);
+  assert.deepEqual(session.calls.map(([n]) => n), ["interpreter_run", "fs_read"]);
+  assert.ok(lines.some((l) => l.startsWith("   Ready in ")) && lines.some((l) => l.startsWith("   Analysis took ")));
   assert.deepEqual(sb.uploads, [[SAMPLE_CSV, "data.csv"]]);
   assert.deepEqual(c.names, ["data-analyst-1"]);
   assert.equal(c.closed(), 1);
   assert.deepEqual(new Uint8Array(readFileSync(out)), PNG);
   assert.ok(lines.some((l) => l.includes("Mumbai leads.")));
   assert.ok(sb.deleted);
-});
-
-test("egress is locked before the data is uploaded", async () => {
-  const sb = fakeSandbox();
-  assert.equal((await go(sb)).code, 0);
-  assert.deepEqual(sb.order, ["install", "update", "upload"]);
-});
-
-test("egress is locked before the agent runs", async () => {
-  const sb = fakeSandbox(); const seen: unknown[][] = [];
-  const connect: Connect = async () => { seen.push([...sb.updates]); return Object.assign(fakeSession(), { close: async () => {} }); };
-  await go(sb, { connect });
-  assert.deepEqual(seen, [[{ egress: { mode: "deny_all" } }]]);
-});
-
-test("a failed install stops before the agent and deletes", async () => {
-  const sb = fakeSandbox({ pipExit: 1 }); const model = finishingModel();
-  const { code, lines } = await go(sb, { model });
-  assert.equal(code, 1);
-  assert.deepEqual(model.requests, []);
-  assert.ok(sb.deleted);
-  assert.ok(lines.some((l) => l.includes("no matching distribution")));
 });
 
 test("an agent failure deletes the sandbox and writes no chart", async () => {
@@ -96,7 +75,7 @@ test("a chart that is not a PNG fails and writes nothing", async () => {
 
 test("Ctrl+C part-way deletes the sandbox and exits 130", async () => {
   const sb = fakeSandbox(); const ac = new AbortController();
-  sb.exec = async () => { ac.abort(); throw new Error("aborted"); };
+  sb.files.uploadFile = async () => { ac.abort(); throw new Error("aborted"); };
   assert.equal((await go(sb, { signal: ac.signal })).code, 130);
   assert.ok(sb.deleted);
 });
