@@ -2,11 +2,16 @@
   "name": "vercel-ai-sdk-js",
   "private": true,
   "type": "module",
-  "scripts": { "start": "node sandbox-agent.js" },
+  "scripts": {
+    "start": "node sandbox-agent.js",
+    "mcp": "node mcp-agent.js",
+    "test": "node --test test/*.test.js"
+  },
   "dependencies": {
+    "@ai-sdk/mcp": "^0.0.39",
     "@ai-sdk/openai": "^2.0.0",
-    "@neevcloud/sdk": "^0.8.0",
+    "@neevcloud/sdk": "^0.9.0",
     "ai": "^5.0.0",
-    "zod": "^3.23.0"
+    "zod": "^3.25.76"
   }
 }
