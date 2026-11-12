@@ -1,0 +1,40 @@
+# crabbox user config that runs each `crabbox run` in a NeevCloud sandbox through neev-cli.
+# Copy it to crabbox's user config path with mode 0600 (see the README): crabbox takes SSH settings only from there.
+provider: external
+target: linux
+sync:
+  # The sandbox can't reach your git remote, so crabbox ships files from your checkout instead of cloning.
+  gitSeed: false
+external:
+  lifecycle:
+    # Checks that neev-cli can reach your project with the saved context.
+    doctor:
+      argv: [neev-cli, sandbox, get, --limit, "1", -o, name]
+    # Creates one sandbox per lease and waits until it is ready.
+    acquire:
+      argv: [neev-cli, sandbox, create, --name, "{{resourceName}}", --template-id, sb-ubuntu-26-04-dev, --cpu, "2", --memory-gb, "4", --wait, --timeout, 5m, -o, name]
+    # Lists sandbox names so `crabbox list` and cleanup can find the ones it made.
+    list:
+      argv: [sh, -c, "neev-cli sandbox get --name cbx- --limit 100 -o json | python3 -c 'import json,sys; print(json.dumps([s[\"name\"] for s in json.load(sys.stdin)[\"items\"]]))'"]
+      output: json-name-array
+      # Only sandboxes named cbx-... belong to crabbox.
+      namePrefix: "cbx-"
+    # Deletes the sandbox when the run ends or you stop a kept box.
+    release:
+      argv: [neev-cli, sandbox, delete, "{{resourceName}}", --yes]
+  connection:
+    # The sandbox name, derived from the lease ID: cbx-<12 hex characters>.
+    resourceName: "{{leaseIdSlug}}"
+    ssh:
+      user: root
+      host: "{{resourceName}}"
+      port: "22"
+      trustProviderOutput: true
+      # Required with proxyCommand: routes every SSH connection, including the readiness check, through it.
+      sshConfigProxy: true
+      # The tools crabbox needs in the sandbox before it syncs.
+      readyCheck: command -v bash && command -v tar && command -v rsync && command -v python3
+      # SSH reaches the sandbox through neev-cli, using the key saved on your neev-cli context.
+      proxyCommand: "neev-cli sandbox ssh-proxy {{resourceName}}"
+  # Where your files land in the sandbox.
+  workRoot: /workspace/crabbox
