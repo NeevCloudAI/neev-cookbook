@@ -61,8 +61,38 @@ class FakeModel:
 
     async def _create(self, **kwargs):
         self.requests.append(copy.deepcopy(kwargs))  # snapshot: the loop keeps mutating messages
-        msg = self.replies.pop(0)
-        return SimpleNamespace(choices=[SimpleNamespace(message=msg)])
+        assert kwargs.get("stream") is True
+        return FakeStream(_chunks(self.replies.pop(0)))
+
+
+class FakeStream:
+    """A streamed reply that records whether the caller closed it."""
+
+    def __init__(self, chunks):
+        self.chunks = chunks
+        self.closed = False
+
+    def __aiter__(self):
+        return self.chunks
+
+    async def close(self):
+        self.closed = True
+
+
+async def _chunks(msg):
+    """Streams msg as chunks, splitting text and each tool call's arguments in two like a real reply."""
+    def chunk(content=None, tool_calls=None):
+        return SimpleNamespace(choices=[SimpleNamespace(delta=SimpleNamespace(content=content, tool_calls=tool_calls))])
+
+    if msg.content:
+        half = len(msg.content) // 2
+        yield chunk(content=msg.content[:half])
+        yield chunk(content=msg.content[half:])
+    for index, call in enumerate(msg.tool_calls or []):
+        args = call.function.arguments
+        half = len(args) // 2
+        yield chunk(tool_calls=[SimpleNamespace(index=index, id=call.id, function=SimpleNamespace(name=call.function.name, arguments=args[:half]))])
+        yield chunk(tool_calls=[SimpleNamespace(index=index, id=None, function=SimpleNamespace(name=None, arguments=args[half:]))])
 
 
 def tool_call(name, arguments, call_id="c1"):

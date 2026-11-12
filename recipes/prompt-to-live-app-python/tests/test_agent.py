@@ -1,11 +1,12 @@
 import asyncio
 import json
 import time
+from types import SimpleNamespace
 
 import pytest
 
 from agent import AGENT_TOOLS, MAX_FILE, MAX_OUTPUT, AgentFailed, build_app, call_tool, openai_tools
-from tests.fakes import FakeModel, FakeSession, text, tool_call
+from tests.fakes import FakeModel, FakeSession, FakeStream, text, tool_call
 
 
 def build(session, model, **kw):
@@ -55,6 +56,19 @@ def test_loop_writes_files_then_finishes():
     assert build(session, model) == "todo app"
     assert session.files["index.html"] == "<h1>todo</h1>"
     assert model.requests[1]["messages"][-1]["role"] == "tool"
+
+
+def test_streamed_reply_with_two_tool_calls_is_rebuilt_per_call():
+    session = FakeSession()
+    a = tool_call("fs_write", {"path": "index.html", "content": "<h1>a</h1>"}, "c1").tool_calls[0]
+    b = tool_call("fs_write", {"path": "app.js", "content": "let b = 1;"}, "c2").tool_calls[0]
+    model = FakeModel([SimpleNamespace(content="writing both", tool_calls=[a, b]),
+                       tool_call("finish", {"summary": "done"}, "c3")])
+    assert build(session, model) == "done"
+    assert session.files == {"index.html": "<h1>a</h1>", "app.js": "let b = 1;"}
+    echoed = model.requests[1]["messages"][2]
+    assert echoed["content"] == "writing both"
+    assert [c["id"] for c in echoed["tool_calls"]] == ["c1", "c2"]
 
 
 def test_loop_refuses_tools_the_model_was_not_given():
@@ -119,6 +133,24 @@ class SlowModel:
             await asyncio.sleep(30)
 
         self.chat = type("C", (), {"completions": type("CC", (), {"create": staticmethod(create)})})()
+
+
+def test_deadline_mid_reply_closes_the_stream():
+    async def stalls():
+        yield SimpleNamespace(choices=[SimpleNamespace(delta=SimpleNamespace(content="start", tool_calls=None))])
+        await asyncio.sleep(30)
+
+    stream = FakeStream(stalls())
+
+    async def create(**kwargs):
+        return stream
+
+    model = SimpleNamespace(chat=SimpleNamespace(completions=SimpleNamespace(create=create)))
+    session = FakeSession()
+    session.files["index.html"] = "x"
+    summary = asyncio.run(build_app(session, model, "m", "x", deadline_s=0.2, log=lambda *_: None))
+    assert "time limit" in summary
+    assert stream.closed
 
 
 def test_deadline_cuts_a_slow_model_call_and_serves_what_was_written():

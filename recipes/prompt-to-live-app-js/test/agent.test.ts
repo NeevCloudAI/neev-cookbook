@@ -47,6 +47,18 @@ test("loop writes files then finishes", async () => {
   assert.equal(model.requests[1].messages.at(-1).role, "tool");
 });
 
+test("a streamed reply with two tool calls is rebuilt per call", async () => {
+  const s = fakeSession();
+  const a = toolCall("fs_write", { path: "index.html", content: "<h1>a</h1>" }, "c1").tool_calls![0];
+  const b = toolCall("fs_write", { path: "app.js", content: "let b = 1;" }, "c2").tool_calls![0];
+  const model = fakeModel([{ content: "writing both", tool_calls: [a, b] }, toolCall("finish", { summary: "done" }, "c3")]);
+  assert.equal(await buildApp(s, model, "m", "x", quiet), "done");
+  assert.deepEqual(Object.fromEntries(s.files), { "index.html": "<h1>a</h1>", "app.js": "let b = 1;" });
+  const echoed = model.requests[1].messages[2];
+  assert.equal(echoed.content, "writing both");
+  assert.deepEqual(echoed.tool_calls.map((c: any) => c.id), ["c1", "c2"]);
+});
+
 test("loop refuses tools the model was not given", async () => {
   const s = fakeSession();
   const model = fakeModel([toolCall("delete_sandbox", {}), toolCall("fs_write", { path: "index.html", content: "x" }, "c2"), toolCall("finish", { summary: "ok" }, "c3")]);
