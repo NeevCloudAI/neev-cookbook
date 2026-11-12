@@ -1,21 +1,24 @@
-"""Agent loop for the AI data analyst recipe: the model analyses a CSV by running Python in the sandbox over MCP."""
+"""Agent loop for the AI data analyst recipe: the model analyses a CSV by running Python in the sandbox's kernel over MCP."""
 from __future__ import annotations
 
 import asyncio
 import json
+import re
 import time
 
-# MCP tools the model gets as-is; it reads, writes and runs code only through run_python, never exec or fs_write directly.
+# MCP tools the model gets as-is; it runs code only through run_python, never exec or interpreter_run directly.
 AGENT_TOOLS = ("fs_list",)
-SCRIPT = "analysis.py"
 CHART = "chart.png"
 MAX_OUTPUT = 6000
+ANSI_COLOUR = re.compile(r"\x1b\[[0-9;]*m")
 
 RUN_PYTHON = {"type": "function", "function": {
     "name": "run_python",
-    "description": "Runs a Python 3 script in the workspace and returns its exit code, stdout and stderr. "
-                   "Each call is a fresh process: variables do not carry over, so reload the data every time.",
-    "parameters": {"type": "object", "properties": {"code": {"type": "string", "description": "The full Python script."}},
+    "description": "Runs Python in the sandbox's persistent kernel and returns its stdout, stderr, results, error and "
+                   "end_reason. Variables, imports and loaded data carry over between calls, so load the data once and "
+                   "build on earlier results. A call gets about 45 seconds. end_reason kernel_restarted or memory_exceeded "
+                   "means the variables were lost: load the data again.",
+    "parameters": {"type": "object", "properties": {"code": {"type": "string", "description": "The Python code to run."}},
                    "required": ["code"]}}}
 FINISH = {"type": "function", "function": {
     "name": "finish", "description": "Call once chart.png is saved, with your findings.",
@@ -24,10 +27,11 @@ FINISH = {"type": "function", "function": {
         "required": ["findings"]}}}
 
 SYSTEM_PROMPT = (
-    "You are a data analyst working in a Linux sandbox. The dataset is data.csv in the working directory. "
-    "pandas and matplotlib are installed; do not install anything, there is no internet access. "
-    "Use run_python to inspect the data first (columns, types, a few rows), then compute the answer with code. "
-    "Never guess a number: every figure you report must come from a script's output. "
+    "You are a data analyst working in a Python kernel in a Linux sandbox. The dataset is data.csv in the working directory. "
+    "numpy, pandas and matplotlib are installed; do not install anything, there is no internet access. "
+    "Use run_python to load the data once and inspect it (columns, types, a few rows); the kernel keeps your variables, "
+    "so each later call builds on the DataFrame and the results you already have. "
+    "Never guess a number: every figure you report must come from your code's output. "
     "Save exactly one clear chart that answers the question to chart.png with matplotlib "
     "(a title, labelled axes, readable tick labels, plt.savefig('chart.png', dpi=150, bbox_inches='tight')). "
     "Then call finish with your findings."
@@ -58,14 +62,15 @@ def _clip(text: str) -> str:
     return text[:MAX_OUTPUT] + f"\n... [truncated {len(text) - MAX_OUTPUT} chars]"
 
 
-async def call_tool(session, name: str, args: dict, timeout: float | None = None) -> str:
-    """Calls one MCP tool, waiting at most `timeout` seconds; failures become errors the model can act on."""
+async def call_tool(session, name: str, args: dict, timeout: float | None = None, keep=lambda data: data) -> str:
+    """Calls one MCP tool, waiting at most `timeout` seconds; failures become errors the model can act on.
+    `keep` trims a structured result before the model sees it."""
     try:
         result = await session.call_tool(name, args, read_timeout_seconds=timeout)
     except Exception as e:  # e.g. a script that outlived the time left or the sandbox's per-call limit
         return f"error: {e}"
     if result.structured_content is not None:
-        out = json.dumps(result.structured_content, ensure_ascii=False)
+        out = json.dumps(keep(result.structured_content), ensure_ascii=False)
     else:
         out = "\n".join(getattr(block, "text", "") for block in result.content)
     if result.is_error:
@@ -73,12 +78,18 @@ async def call_tool(session, name: str, args: dict, timeout: float | None = None
     return _clip(out)
 
 
+def _cell_text(cell: dict) -> dict:
+    """Keeps a cell's text: the kernel returns each open figure as a base64 PNG, and tracebacks carry terminal colours."""
+    results = [r["text/plain"] for r in cell.get("results") or [] if "text/plain" in r]
+    error = cell.get("error")
+    if error:
+        error = {**error, "traceback": [ANSI_COLOUR.sub("", line) for line in error.get("traceback") or []]}
+    return {**cell, "results": results, "error": error}
+
+
 async def run_python(session, code: str, timeout: float | None = None) -> str:
-    """Writes the code to analysis.py with fs_write, then runs it with exec; MPLBACKEND=Agg since there is no display."""
-    written = await call_tool(session, "fs_write", {"path": SCRIPT, "content": code}, timeout)
-    if written.startswith("error:"):
-        return written
-    return await call_tool(session, "exec", {"program": "python3", "args": [SCRIPT], "env": ["MPLBACKEND=Agg"]}, timeout)
+    """Runs the code in the sandbox's default kernel context with interpreter_run, so its variables persist."""
+    return await call_tool(session, "interpreter_run", {"code": code}, timeout, keep=_cell_text)
 
 
 def _parse_args(raw: str | None) -> dict | None:
@@ -166,8 +177,9 @@ async def analyse(session, model_client, model: str, question: str, max_steps: i
                     log(f"   step {step}: run_python (no code)")
                     result = NO_CODE
                 else:
-                    log(f"   step {step}: run_python ({len(code.splitlines())} lines)")
+                    ran = time.monotonic()
                     result = await run_python(session, code, max(time_left(), 0.1))
+                    log(f"   step {step}: run_python ({len(code.splitlines())} lines, ran in {time.monotonic() - ran:.1f}s)")
             else:
                 log(f"   step {step}: {name} {args.get('path') or ''}".rstrip())
                 result = await call_tool(session, name, args, max(time_left(), 0.1))

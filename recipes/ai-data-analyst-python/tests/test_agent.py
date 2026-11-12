@@ -18,36 +18,35 @@ def test_model_sees_fs_list_plus_run_python_and_finish():
     tools = asyncio.run(openai_tools(FakeSession()))
     names = [t["function"]["name"] for t in tools]
     assert names == [*AGENT_TOOLS, "run_python", "finish"]
-    assert "exec" not in names and "fs_write" not in names and "delete_sandbox" not in names
+    assert "exec" not in names and "interpreter_run" not in names and "delete_sandbox" not in names
     fs_list = tools[0]["function"]
     assert fs_list["description"] == "fs_list from the server"
 
 
-def test_run_python_writes_the_script_and_runs_it_with_python3_headless():
+def test_run_python_runs_the_code_in_the_default_kernel_context():
     session = FakeSession()
     out = asyncio.run(run_python(session, CHART_CODE))
-    assert session.files["analysis.py"] == CHART_CODE
-    name, args = session.calls[-1]
-    assert name == "exec" and args["program"] == "python3" and args["args"] == ["analysis.py"]
-    assert "MPLBACKEND=Agg" in args["env"]
-    assert json.loads(out)["exit_code"] == 0 and "chart.png" in session.files
+    assert session.calls == [("interpreter_run", {"code": CHART_CODE})]
+    assert json.loads(out)["end_reason"] == "ok" and "chart.png" in session.files
 
 
-def test_run_python_reports_a_failing_script_with_its_traceback():
-    session = FakeSession(on_exec=lambda s, code: {"exit_code": 1, "stdout": "", "stderr": "KeyError: 'sales'"})
+def test_run_python_reports_a_raising_cell_with_its_traceback_without_colours():
+    error = {"name": "KeyError", "value": "'sales'", "traceback": ["\x1b[31mKeyError\x1b[39m: 'sales'"]}
+    session = FakeSession(on_run=lambda s, code: {"stdout": "", "stderr": "", "results": [], "error": error, "end_reason": "error"})
     out = json.loads(asyncio.run(run_python(session, "df['sales']")))
-    assert out["exit_code"] == 1 and "KeyError" in out["stderr"]
+    assert out["end_reason"] == "error" and out["error"]["traceback"] == ["KeyError: 'sales'"]
 
 
-def test_run_python_stops_when_the_script_cannot_be_written():
-    session = FakeSession()
-    session.raise_on["fs_write"] = ConnectionError("stream closed")
-    assert asyncio.run(run_python(session, "print(1)")).startswith("error:")
-    assert [n for n, _ in session.calls] == ["fs_write"]
+def test_run_python_returns_figures_as_text_not_base64():
+    figure = {"text/plain": "<Figure size 640x480 with 1 Axes>", "image/png": "iVBORw0KGgo" * 5000}
+    session = FakeSession(on_run=lambda s, code: {"stdout": "", "stderr": "", "results": [figure, {"image/png": "x"}],
+                                                  "end_reason": "ok"})
+    out = asyncio.run(run_python(session, "plt.plot([1])"))
+    assert json.loads(out)["results"] == ["<Figure size 640x480 with 1 Axes>"] and "iVBOR" not in out
 
 
 def test_long_output_is_clipped_and_a_raising_call_is_an_error_not_a_crash():
-    session = FakeSession(on_exec=lambda s, code: {"exit_code": 0, "stdout": "x" * (MAX_OUTPUT * 3), "stderr": ""})
+    session = FakeSession(on_run=lambda s, code: {"stdout": "x" * (MAX_OUTPUT * 3), "stderr": "", "results": [], "end_reason": "ok"})
     out = asyncio.run(run_python(session, "print('x' * 99999)"))
     assert len(out) < MAX_OUTPUT + 200 and "truncated" in out
     session.raise_on["fs_list"] = TimeoutError("deadline_exceeded")
@@ -55,10 +54,11 @@ def test_long_output_is_clipped_and_a_raising_call_is_an_error_not_a_crash():
 
 
 def test_loop_runs_code_saves_the_chart_and_returns_the_findings():
-    session = FakeSession()
+    session, lines = FakeSession(), []
     model = FakeModel([tool_call("run_python", {"code": CHART_CODE}),
                        tool_call("finish", {"findings": "Mumbai leads revenue."}, "c2")])
-    assert run(session, model) == "Mumbai leads revenue."
+    assert run(session, model, log=lines.append) == "Mumbai leads revenue."
+    assert lines[0].startswith("   step 1: run_python (2 lines, ran in ") and lines[0].endswith("s)")
     assert model.requests[1]["messages"][-1]["role"] == "tool"
     assert "chart.png" in session.files
 
@@ -141,15 +141,15 @@ def test_tool_calls_wait_no_longer_than_the_time_left():
     model = FakeModel([tool_call("fs_list", {}), tool_call("run_python", {"code": CHART_CODE}, "c2"),
                        tool_call("finish", {"findings": "ok"}, "c3")])
     assert run(session, model, deadline_s=60) == "ok"
-    bounded = [t for (name, _), t in zip(session.calls, session.timeouts) if name in ("fs_list", "fs_write", "exec")]
-    assert len(bounded) == 3 and all(t is not None and 0 < t <= 60 for t in bounded)
+    bounded = [t for (name, _), t in zip(session.calls, session.timeouts) if name in ("fs_list", "interpreter_run")]
+    assert len(bounded) == 2 and all(t is not None and 0 < t <= 60 for t in bounded)
 
 
-class HangingExecSession(FakeSession):
-    """exec never finishes: it waits out the read timeout it was given, or 30s without one, then raises."""
+class HangingKernelSession(FakeSession):
+    """interpreter_run never finishes: it waits out the read timeout it was given, or 30s without one, then raises."""
 
     async def call_tool(self, name, arguments=None, read_timeout_seconds=None):
-        if name != "exec":
+        if name != "interpreter_run":
             return await super().call_tool(name, arguments, read_timeout_seconds)
         await asyncio.sleep(30 if read_timeout_seconds is None else read_timeout_seconds)
         raise TimeoutError("timed out waiting for the tool")
@@ -159,7 +159,7 @@ def test_a_hanging_script_is_cut_at_the_deadline():
     model = FakeModel([tool_call("run_python", {"code": "while True: pass"})] * 3)
     t = time.monotonic()
     with pytest.raises(AgentFailed, match="time limit"):
-        asyncio.run(analyse(HangingExecSession(), model, "m", "q", deadline_s=0.3, log=lambda *_: None))
+        asyncio.run(analyse(HangingKernelSession(), model, "m", "q", deadline_s=0.3, log=lambda *_: None))
     assert time.monotonic() - t < 5
 
 

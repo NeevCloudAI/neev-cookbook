@@ -1,0 +1,43 @@
+# Every container shares the sandbox's network (network_mode: host), so services reach each other on 127.0.0.1.
+services:
+  db:
+    image: postgres:17-alpine
+    network_mode: host
+    environment:
+      POSTGRES_PASSWORD: postgres
+    healthcheck:
+      # Check over TCP: on first start Postgres answers on its socket before it opens the port.
+      test: ["CMD", "pg_isready", "-h", "127.0.0.1", "-U", "postgres"]
+      interval: 1s
+      retries: 60
+
+  cache:
+    image: redis:7-alpine
+    network_mode: host
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 1s
+      retries: 60
+
+  api:
+    image: oven/bun:1-alpine
+    network_mode: host
+    working_dir: /app
+    volumes: ["./api:/app:ro"]
+    command: ["bun", "server.ts"]
+    depends_on:
+      db: { condition: service_healthy }
+      cache: { condition: service_healthy }
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:3000/health"]
+      interval: 1s
+      retries: 60
+
+  # Only `docker compose run tests` starts it, so `up` brings up the app alone.
+  tests:
+    image: oven/bun:1-alpine
+    network_mode: host
+    working_dir: /tests
+    volumes: ["./tests:/tests:ro"]
+    command: ["bun", "test"]
+    profiles: ["test"]

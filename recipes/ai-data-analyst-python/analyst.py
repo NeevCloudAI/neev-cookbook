@@ -1,4 +1,4 @@
-"""AI data analyst: an agent answers a question about a CSV by running pandas in a NeevCloud sandbox, and saves a chart."""
+"""AI data analyst: an agent answers a question about a CSV by running pandas in a NeevCloud Code Interpreter sandbox, and saves a chart."""
 from __future__ import annotations
 
 import argparse
@@ -6,6 +6,7 @@ import asyncio
 import os
 import secrets
 import sys
+import time
 from pathlib import Path
 
 from agent import CHART, AgentFailed, analyse
@@ -17,13 +18,8 @@ DEFAULT_MODEL = "glm-4-7"
 SAMPLE_CSV = str(Path(__file__).parent / "data" / "sales.csv")
 DEFAULT_QUESTION = ("Which cities and product categories bring in the most revenue, and how much do "
                     "October and November lift sales? Chart monthly revenue for the top cities.")
-# The only hosts pip needs: the package index and the file host it redirects to.
-PYPI_HOSTS = ["pypi.org", "files.pythonhosted.org"]
-# The template's Python is managed by the OS, so pip needs --break-system-packages; --user keeps it out of system dirs.
-# No --quiet: the exec stream times out after 60s without output, and pip's progress lines keep it alive.
-PIP_INSTALL = ["python3", "-m", "pip", "install", "--user", "--break-system-packages",
-               "--disable-pip-version-check", "--no-warn-script-location", "--root-user-action=ignore",
-               "pandas", "matplotlib"]
+# Stateful Python kernels with numpy, pandas and matplotlib preinstalled, so nothing is installed at run time.
+TEMPLATE = "sb-ubuntu-26-04-interpreter"
 PNG_SIGNATURE = b"\x89PNG\r\n\x1a\n"
 
 
@@ -61,31 +57,29 @@ def _root_cause(e: BaseException) -> BaseException:
 
 
 def run(question: str, csv_path: str, out_path: Path, client, model_client, model: str, connect, log=print) -> int:
-    """Creates a sandbox, installs pandas, has the agent analyse the CSV over MCP, downloads the chart, always deletes."""
+    """Creates a Code Interpreter sandbox, has the agent analyse the CSV over MCP, downloads the chart, always deletes."""
     sandbox = None
     try:
-        log("1. Creating a sandbox that can reach only pypi.org and files.pythonhosted.org...")
-        sandbox = client.sandboxes.create({"name": f"data-analyst-{secrets.token_hex(4)}"}, allow_egress=PYPI_HOSTS)
+        log("1. Creating a Code Interpreter sandbox with no internet access...")
+        started = time.monotonic()
+        # No egress at all from the start: code the model writes can reach no host.
+        sandbox = client.sandboxes.create({"name": f"data-analyst-{secrets.token_hex(4)}", "sandbox_template_id": TEMPLATE,
+                                           "egress": {"mode": "deny_all"}})
         sandbox.wait_until_ready(timeout_ms=300_000)
-        log("2. Installing pandas and matplotlib...")
-        installed = sandbox.exec(PIP_INSTALL, timeout_ms=240_000)
-        if installed.exit_code != 0:
-            log(f"Failed: pip install exited {installed.exit_code}: {installed.stderr.strip()[-300:]}")
-            return 1
-        # Lock egress before the data arrives: code the model writes can then reach no host at all.
-        sandbox.update({"egress": {"mode": "deny_all"}})
-        log("3. Internet access removed. Uploading the data...")
+        log(f"   Ready in {time.monotonic() - started:.1f}s. Uploading the data...")
         sandbox.files.upload_file(csv_path, "data.csv")
-        log(f"4. Asking {model}: {question}")
+        log(f"2. Asking {model}: {question}")
+        started = time.monotonic()
         findings = asyncio.run(_analyse(connect, sandbox.name, model_client, model, question, log))
-        log(f"5. Downloading {CHART}...")
+        log(f"   Analysis took {time.monotonic() - started:.1f}s")
+        log(f"3. Downloading {CHART}...")
         chart = sandbox.files.read(CHART)
         if not chart.startswith(PNG_SIGNATURE):
             log(f"Failed: the agent's {CHART} is not a PNG image")
             return 1
         out_path.write_bytes(chart)
         log(f"   Saved {out_path} ({len(chart) // 1024} KB)")
-        log("6. Findings:")
+        log("4. Findings:")
         log(findings)
         return 0
     except KeyboardInterrupt:
