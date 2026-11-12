@@ -16,7 +16,7 @@ In the NeevCloud console, open **Account > API Keys** and create:
 
 Note your organization and project IDs too (`NEEV_ORG_ID`, `NEEV_PROJECT_ID`). Some recipes need only the Sandboxes key; each README says which.
 
-Docs: [Create an API key](https://docs.ai.neevcloud.com/getting-started/create-api-key) · [Organizations and projects](https://docs.ai.neevcloud.com/getting-started/org-and-project)
+Docs: [Create an API key](https://docs.ai.neevcloud.com/getting-started/create-api-key) · [Organizations and projects](https://docs.ai.neevcloud.com/getting-started/org-and-project#find-your-organization-id-and-project-id)
 
 ## 2. Install Python or Node
 

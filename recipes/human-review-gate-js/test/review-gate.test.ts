@@ -107,6 +107,15 @@ test("the packet shows the agent's trail, not the setup or the diff's own reads"
   assert.ok(activity.includes("exec (program not recorded)") && !activity.includes("README.md"));
 });
 
+test("execution trace events are left out of the packet", async () => {
+  const sb = new FakeSandbox();
+  sb.trace("init"); // a program the sandbox ran before any call; exec adds another launch
+  const { code, md, activity } = await go({ sb });
+  assert.equal(code, 0);
+  assert.equal(sb.trail.filter((e) => !e.api).length, 2);
+  assert.equal(activity.split("| +").length - 1, 3); assert.ok(!md.includes("Warning"));
+});
+
 test("the trail is read after the agent and before the sandbox is deleted", async () => {
   const sb = new FakeSandbox(); const sizes: number[] = [];
   const realAudit = sb.audit.bind(sb); const realDelete = sb.delete.bind(sb);
@@ -171,8 +180,8 @@ test("it waits for agent records that land late", async () => {
     const page = await realAudit(q);
     if (sb.trail.length > Object.keys(PROJECT).length && late > 0) { // the agent's last record is late
       if (q?.cursor === undefined) late--;
-      const last = sb.trail.at(-1);
-      page.records = page.records.filter((r) => r !== last);
+      const last = sb.trail.filter((e) => e.api).at(-1);
+      page.data = page.data.filter((r) => r !== last);
     }
     return page;
   };
@@ -190,7 +199,7 @@ test("the setup boundary waits for every upload, not just a count", async () => 
     const page = await realAudit(q);
     if (early > 0) { // the uploads have not landed yet; only the bootstrap records show
       if (q?.cursor === undefined) early--;
-      page.records = page.records.filter((r) => r.command === "bootstrap"); page.next_cursor = undefined;
+      page.data = page.data.filter((r) => r.resources?.some((x) => x.name === "bootstrap")); page.next_cursor = undefined;
     }
     return page;
   };
@@ -204,8 +213,8 @@ test("agent records that never appear still go to review, with a warning", async
   const setup: unknown[] = [];
   sb.audit = async (q) => {
     const page = await realAudit(q);
-    if (!setup.length) setup.push(...page.records); // the setup records are visible; the agent's never arrive
-    page.records = page.records.filter((r) => setup.includes(r)); page.next_cursor = undefined;
+    if (!setup.length) setup.push(...page.data); // the setup records are visible; the agent's never arrive
+    page.data = page.data.filter((r) => setup.includes(r)); page.next_cursor = undefined;
     return page;
   };
   const time = fakeTime();
@@ -259,8 +268,8 @@ test("a failed lookup after an interrupted create names the sandbox", async () =
 
 test("reading the trail stops after the page cap", async () => {
   const calls: (string | undefined)[] = [];
-  const endless = { audit: async (q: { cursor?: string }) => { calls.push(q.cursor); return { records: [], next_cursor: "again", retention_days: 30 }; } };
-  assert.deepEqual(await readTrail(endless, 25, 4), { records: [], retentionDays: 30 });
+  const endless = { audit: async (q: { cursor?: string }) => { calls.push(q.cursor); return { data: [], next_cursor: "again", retention_days: 30 }; } };
+  assert.deepEqual(await readTrail(endless, 25, 4), { events: [], retentionDays: 30 });
   assert.equal(calls.length, 4);
 });
 

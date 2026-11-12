@@ -5,9 +5,13 @@ import json
 from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
 
+from neevai import AuditEvent
+
 # Everything the real server lists, so tests can check each agent only ever sees its own tools.
 SERVER_TOOLS = ("exec", "fs_read", "fs_write", "fs_list", "process_start", "create_sandbox", "delete_sandbox", "expose_port")
 T0 = datetime(2026, 10, 5, 12, 0, tzinfo=timezone.utc)
+CLOUD = {"provider": "NeevCloud", "account": {"uid": "prj-fake"}, "org": {"uid": "org-fake"}}
+METADATA = {"version": "1.9.0", "product": {"name": "Sandbox Audit", "vendor_name": "NeevCloud"}}
 
 
 def _ok(data):
@@ -37,6 +41,8 @@ class FakeSession:
     def _audit(self, tool, target=None):
         if self.sandbox is not None:
             self.sandbox.record(tool, target, self.caller)
+            if tool == "exec":
+                self.sandbox.trace(1, "Launch", "python3", self.caller)
 
     async def call_tool(self, name, arguments=None):
         args = arguments or {}
@@ -71,15 +77,39 @@ class FakeSandbox:
         self.name = name
         self.files_store, self.trail, self.deleted = {}, [], False
         self.caller, self.page_size = caller, page_size
+        self.trace(99, "Sandbox Start", "init", None)  # the oldest event in every real trail
         sandbox = self
         self.files = SimpleNamespace(
             read_text=lambda path: sandbox._sdk_read(path),
             write=lambda path, content: sandbox._sdk_write(path, content),
             exists=lambda path: path in sandbox.files_store)
 
+    def _event(self, actor, **fields):
+        return AuditEvent.model_validate({
+            "time": int((T0 + timedelta(seconds=len(self.trail))).timestamp() * 1000),
+            "severity_id": 1, "severity": "Informational", "status_id": 1, "status": "Success",
+            "actor": {"user": actor}, "device": {"type_id": 6, "type": "Virtual", "uid": f"id-{self.name}"},
+            "cloud": CLOUD, "osint": [], "metadata": {**METADATA, "uid": f"e{len(self.trail)}"}, **fields})
+
     def record(self, tool, target, caller):
-        self.trail.append(SimpleNamespace(at=T0 + timedelta(seconds=len(self.trail)), tool=tool, command=None,
-                                          target=target, outcome=SimpleNamespace(value="success"), caller_source=caller))
+        # Shaped as the API returns it: the path is a file resource, the key is on the actor.
+        resources = [{"type": "sandbox", "uid": f"id-{self.name}"}]
+        if target is not None:
+            resources.append({"type": "file", "name": target})
+        actor = {"type": "API Key", "type_id": 99, "uid": caller, "programmatic_credentials": [{"uid": caller}]}
+        self.trail.append(self._event(
+            actor, class_uid=6003, class_name="API Activity", category_uid=6, category_name="Application Activity",
+            activity_id=99, activity_name="Other", type_uid=600399, type_name="API Activity: Other",
+            api={"operation": tool}, resources=resources))
+
+    def trace(self, activity_id, activity_name, program, caller):
+        """Appends a Process Activity event from execution trace; it has no api. No caller means the sandbox's own."""
+        actor = ({"type": "API Key", "type_id": 99, "uid": caller} if caller
+                 else {"type": "Unknown", "type_id": 0, "uid": "unknown"})
+        self.trail.append(self._event(
+            actor, class_uid=1007, class_name="Process Activity", category_uid=1, category_name="System Activity",
+            activity_id=activity_id, activity_name=activity_name, type_uid=100700 + activity_id,
+            type_name=f"Process Activity: {activity_name}", process={"pid": 1 + len(self.trail), "name": program}))
 
     def _sdk_read(self, path):
         self.record("fs.read", path, self.caller)
@@ -97,7 +127,7 @@ class FakeSandbox:
         newest_first = list(reversed(self.trail))
         start = int(cursor or 0)
         end = start + self.page_size
-        return SimpleNamespace(records=newest_first[start:end], next_cursor=str(end) if end < len(newest_first) else None)
+        return SimpleNamespace(data=newest_first[start:end], next_cursor=str(end) if end < len(newest_first) else None)
 
     def delete(self):
         self.deleted = True

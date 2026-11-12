@@ -48,6 +48,18 @@ def test_flags_name_sensitive_reads_deletes_and_terminal_sessions():
     assert pack.flag(record(1, "fs.write", ".env")) is None
 
 
+def test_credential_is_the_actors_uid_and_empty_for_an_unknown_actor():
+    assert pack.credential(record(1, "fs.read", "a")) == CRED_A
+    user = {"type": "User", "type_id": 1, "uid": "usr-1", "name": "Asha"}
+    assert pack.credential(record(1, "fs.read", "a", actor={"user": user})) == "usr-1"
+    unknown = {"type": "Unknown", "type_id": 0, "uid": "unknown"}
+    assert pack.credential(record(1, "fs.read", "a", actor={"user": unknown})) == ""
+
+
+def test_sandbox_id_comes_from_the_device():
+    assert pack.sandbox_id(record(1, "fs.read", "a", sandbox="sb-1")) == "sb-1"
+
+
 def test_credential_summary_counts_records_errors_and_flags_per_key():
     summary = {c.credential: c for c in pack.by_credential(pack.make_rows(two_trails()))}
     a, b = summary[CRED_A], summary[CRED_B]
@@ -64,7 +76,7 @@ def test_pack_writes_records_credentials_summary_and_a_manifest_that_verifies(tm
     assert pack.verify_manifest(tmp_path) == []
     rows = read_csv(tmp_path / "records.csv")
     assert len(rows) == 7 and rows[0]["credential"] == CRED_A and rows[0]["at"] == "2026-10-05T12:00:01Z"
-    assert rows[4]["sensitive"] == "sensitive read" and rows[5]["outcome"] == "error" and rows[5]["reason_code"] == "not_found"
+    assert rows[4]["sensitive"] == "sensitive read" and rows[5]["outcome"] == "failure" and rows[5]["reason_code"] == "not_found"
     assert {r["credential"] for r in read_csv(tmp_path / "credentials.csv")} == {CRED_A, CRED_B}
 
 

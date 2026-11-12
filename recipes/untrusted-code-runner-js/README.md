@@ -8,7 +8,7 @@ Your product lets users run their own Python or JavaScript. This recipe is the b
 
 ## Run it
 
-You need Node 20+, a **Sandboxes** key ([create a key](https://docs.ai.neevcloud.com/getting-started/create-api-key)) and your [organization and project IDs](https://docs.ai.neevcloud.com/getting-started/org-and-project). No model key: nothing here calls a model.
+You need Node 20+, a **Sandboxes** key ([create a key](https://docs.ai.neevcloud.com/getting-started/create-api-key)) and your [organization and project IDs](https://docs.ai.neevcloud.com/getting-started/org-and-project#find-your-organization-id-and-project-id). No model key: nothing here calls a model.
 
 ```bash
 npm install

@@ -6,10 +6,10 @@ from types import SimpleNamespace
 
 import simulate_agent
 from simulate_agent import AGENT_TOOLS, openai_tools, work
-from tests.fakes import NOT_BOUND, FakeClient, FakeModel, FakeSandbox, FakeSession, record, text, tool_call, trail
+from tests.fakes import NOT_BOUND, FakeClient, FakeModel, FakeSandbox, FakeSession, record, text, tool_call, trace, trail
 
 NAME = "coding-agent-test"
-WORKED_TRAIL = trail([record("exec", rid="2"), record("fs.write", "app/server.js", rid="1")])
+WORKED_TRAIL = trail([trace("node", rid="t"), record("exec", rid="2"), record("fs.write", "app/server.js", rid="1")])
 
 
 def connector(session):

@@ -187,6 +187,21 @@ def test_the_audit_trail_waits_for_the_last_records_and_collapses_repeats():
     assert "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx" in text
 
 
+def test_the_audit_trail_leaves_out_execution_trace_events():
+    agent, lines, seen = FakeAgent(audit_lag=0), [], []
+    real_audit = agent.audit
+
+    def audit(**kw):
+        seen[:] = agent.machine.ops
+        return real_audit(**kw)
+
+    agent.audit = audit
+    assert run(agent, lines) == 0
+    calls = sum(op[0] != "trace" for op in seen)
+    assert calls < len(seen)  # exec and process.start each added a process launch
+    assert f"   {calls} events, made with API key" in "\n".join(lines)
+
+
 @pytest.mark.parametrize("raw, expected", [
     ("1234abcd-5678-4def-9abc-def012345678", "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"),
     (None, "unknown"),

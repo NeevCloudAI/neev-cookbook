@@ -1,6 +1,6 @@
 # Audit evidence pack
 
-Your auditor asks what your agents did last month, and under which credentials. This recipe exports your sandboxes' audit trails for a time window into a pack you can hand over: every recorded operation as CSV, a summary per API key, and a SHA-256 manifest that shows if any file was changed afterwards.
+Your auditor asks what your agents did last month, and under which credentials. This recipe exports your sandboxes' audit trails for a time window into a pack you can hand over: every recorded operation as CSV, a summary per API key or console user, and a SHA-256 manifest that shows if any file was changed afterwards.
 
 <p align="center">
   <img src="../../assets/runs/audit-evidence-pack-python.gif" alt="A real run of this recipe, recorded in a terminal" width="720">
@@ -8,7 +8,7 @@ Your auditor asks what your agents did last month, and under which credentials. 
 
 ## Run it
 
-You need Python 3.11+, a **Sandboxes** key ([create a key](https://docs.ai.neevcloud.com/getting-started/create-api-key)) and your [organization and project IDs](https://docs.ai.neevcloud.com/getting-started/org-and-project). No model key: nothing here calls a model.
+You need Python 3.11+, a **Sandboxes** key ([create a key](https://docs.ai.neevcloud.com/getting-started/create-api-key)) and your [organization and project IDs](https://docs.ai.neevcloud.com/getting-started/org-and-project#find-your-organization-id-and-project-id). No model key: nothing here calls a model.
 
 ```bash
 python3.12 -m venv .venv
@@ -34,7 +34,7 @@ The script exits 0 only when the pack was written and its manifest verified.
 ## What is in the pack
 
 - `records.csv`: one row per recorded operation across all the sandboxes, oldest first: time, sandbox, API key, operation, program, target path, outcome, duration and a `sensitive` flag.
-- `credentials.csv`: one row per API key: the sandboxes it touched, its operation, error and sensitive counts, and its first and last activity.
+- `credentials.csv`: one row per credential, an API key or a signed-in console user: the sandboxes it touched, its operation, error and sensitive counts, and its first and last activity.
 - `summary.md`: the page an auditor reads first: the window covered per sandbox, each key's activity, the errors and sensitive operations, and what the trail does and doesn't record.
 - `MANIFEST.sha256`: the SHA-256 of the three files above.
 
@@ -60,11 +60,12 @@ Inside the pack's folder, run `shasum -a 256 -c MANIFEST.sha256` (macOS) or `sha
 
 ## What the trail records
 
-- When the operation happened, what it was, the program (never its arguments), the path, the outcome, how long it took, the API key and a request id. `ls -la` is recorded as `ls`; file contents and input are never recorded.
+- When the operation happened, what it was, the program (never its arguments), the path, the outcome (`success` or `failure`), how long it took, who made the call and a request id. `ls -la` is recorded as `ls`; file contents and input are never recorded.
 - The outcome is whether the call succeeded, not the program's exit code.
-- The API key identifies a key, not a person. Work over MCP is recorded like SDK work, under the key that connected.
+- Calls made with an API key are grouped under that key, which identifies a key, not a person; calls from a signed-in console user are grouped under that user's id. Work over MCP is recorded like SDK work, under the key that connected.
 - Commands run through the MCP `exec` tool are currently recorded without their program name, and a refused MCP call adds a record with no operation name, shown as `(unnamed)`. The demo shows both.
 - Lifecycle events (creating, pausing, deleting a sandbox) are not part of this trail.
+- With execution trace on, the trail also logs each program the sandbox ran and each connection it opened. The pack exports the API calls only.
 
 This pack is evidence of what the audit trail recorded. It does not by itself make anyone compliant with SOC 2, RBI or DPDP requirements; which evidence a control needs is for you and your auditor to decide.
 

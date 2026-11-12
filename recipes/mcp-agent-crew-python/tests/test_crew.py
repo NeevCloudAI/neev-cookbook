@@ -239,6 +239,17 @@ def test_all_agents_share_one_event_loop_like_the_real_async_model_client():
     assert code == 0 and len(loops) == 1
 
 
+def test_audit_trails_leave_out_execution_trace_so_the_coders_first_event_is_the_scripts_hand_over():
+    sb = FakeSandbox("crew-coder-1", "cred-ks")
+    sb.record("fs.write", "PLAN.md", "cred-ks")
+    sb.trace(1, "Launch", "python3", "cred-kc")
+    sb.record("fs.read", "PLAN.md", "cred-kc")
+    trails = crew._read_trails({"coder": sb}, lambda s: None)
+    assert [r.api.operation for r in trails["coder"]] == ["fs.write", "fs.read"]
+    who = crew._credentials(trails, {"coder": ("CODER_API_KEY", "kc")}, "ks")
+    assert who == {"cred-ks": ["script"], "cred-kc": ["coder"]}
+
+
 def test_audit_trails_are_reread_until_late_records_stop_arriving():
     sb, sleeps = FakeSandbox("crew-coder-1", "cred-ks"), []
     sb.record("fs.write", "PLAN.md", "cred-ks")
@@ -254,7 +265,7 @@ def test_audit_trails_are_reread_until_late_records_stop_arriving():
 
     sb.audit = audit_with_lag
     trails = crew._read_trails({"coder": sb}, sleeps.append)
-    assert [r.tool for r in trails["coder"]] == ["fs.write", "exec", "fs.read"]
+    assert [r.api.operation for r in trails["coder"]] == ["fs.write", "exec", "fs.read"]
     assert len(sleeps) == 3
 
 

@@ -3,16 +3,49 @@ import json
 from datetime import datetime, timezone
 from types import SimpleNamespace
 
+from neevai import AuditEvent
+
 FIXED = "// fixed\n"
 TESTS_FAILING = "ℹ tests 4\nℹ pass 1\nℹ fail 3\n"
 TESTS_PASSING = "ℹ tests 4\nℹ pass 4\nℹ fail 0\n"
 KEY_ID = "1234abcd-5678-4def-9abc-def012345678"
+SANDBOX_ID = "01a10ca6-f39d-793d-b659-7aa536f71813"
 
 
 def event(kind, **part):
     """One line of `opencode run --format json` output."""
     return json.dumps({"type": kind, "timestamp": 1, "part": {"type": kind, **part}}) + "\n"
 
+
+
+def audit_event(i, tool, command, target):
+    """Builds one audit event in the API's shape: a path is a file resource for fs calls, a program a process.
+
+    A "trace" tool is a Process Activity launch of command, which execution trace adds and which has no api.
+    """
+    event = {
+        "time": int(datetime(2026, 1, 1, 7, 0, i % 60, tzinfo=timezone.utc).timestamp() * 1000),
+        "severity_id": 1, "severity": "Informational", "status_id": 1, "status": "Success",
+        "actor": {"user": {"type": "API Key", "type_id": 99, "uid": KEY_ID,
+                           "programmatic_credentials": [{"uid": KEY_ID, "type": "API Key"}]}},
+        "device": {"type_id": 6, "type": "Virtual", "uid": SANDBOX_ID},
+        "cloud": {"provider": "NeevCloud", "account": {"uid": "prj-fake"}, "org": {"uid": "org-fake"}}, "osint": [],
+        "metadata": {"version": "1.9.0", "product": {"name": "Sandbox Audit", "vendor_name": "NeevCloud"}, "uid": f"e{i}"},
+    }
+    if tool == "trace":
+        return AuditEvent.model_validate({
+            **event, "class_uid": 1007, "class_name": "Process Activity", "category_uid": 1,
+            "category_name": "System Activity", "activity_id": 1, "activity_name": "Launch", "type_uid": 100701,
+            "type_name": "Process Activity: Launch", "process": {"pid": 4000 + i, "name": command}})
+    resources = [{"type": "sandbox", "uid": SANDBOX_ID}]
+    if target is not None:
+        resources.append({"type": "file" if tool.startswith("fs.") else "process", "name": target})
+    if command is not None:
+        resources.append({"type": "process", "name": command})
+    return AuditEvent.model_validate({
+        **event, "class_uid": 6003, "class_name": "API Activity", "category_uid": 6,
+        "category_name": "Application Activity", "activity_id": 99, "activity_name": "Other", "type_uid": 600399,
+        "type_name": "API Activity: Other", "api": {"operation": tool}, "resources": resources})
 
 class FakeMachine:
     """The agent's machine: workspace files and supervised processes, the coding CLI among them.
@@ -55,14 +88,14 @@ class FakeMachine:
 
     def exec(self, command, args=None, **kw):
         argv = list(command) + list(args or [])
-        self.ops.append(("exec", argv[0], None))
+        self.ops += [("exec", argv[0], None), ("trace", argv[0], None)]
         if argv[:2] == ["node", "--test"]:
             fixed = self.workspace.get("slugify.js") == FIXED
             return SimpleNamespace(stdout=TESTS_PASSING if fixed else TESTS_FAILING, stderr="", exit_code=0 if fixed else 1)
         return SimpleNamespace(stdout="", stderr=f"unknown command {argv}", exit_code=127)
 
     def _start(self, program, args=None, cwd=None, env=None, stdin=None):
-        self.ops.append(("process.start", program[0], None))
+        self.ops += [("process.start", program[0], None), ("trace", program[0], None)]
         self.started.append({"argv": list(program), "cwd": cwd, "env": dict(env or {})})
         process_id = f"proc-{len(self.started)}"
         self.running.add(process_id)
@@ -148,13 +181,11 @@ class FakeAgent:
             self.audit_lag -= 1
             last_exec = max(i for i, op in enumerate(ops) if op[0] == "exec")
             ops = ops[:last_exec]
-        records = [SimpleNamespace(at=datetime(2026, 1, 1, 7, 0, i % 60, tzinfo=timezone.utc), tool=t, command=c,
-                                   target=tg, outcome=SimpleNamespace(value="success"), caller_source=KEY_ID)
-                   for i, (t, c, tg) in enumerate(ops)][::-1]
+        records = [audit_event(i, t, c, tg) for i, (t, c, tg) in enumerate(ops)][::-1]
         start = int(cursor or 0)
         page = records[start:start + 2]
         more = start + 2 < len(records)
-        return SimpleNamespace(records=page, next_cursor=str(start + 2) if more else None)
+        return SimpleNamespace(data=page, next_cursor=str(start + 2) if more else None)
 
     def delete(self):
         self.calls.append("delete")

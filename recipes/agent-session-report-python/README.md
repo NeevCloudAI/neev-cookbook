@@ -10,7 +10,7 @@ There is also a [TypeScript version](../agent-session-report-js).
 
 ## Run it
 
-You need Python 3.11+, a **Sandboxes** and a **Model API** key ([create a key](https://docs.ai.neevcloud.com/getting-started/create-api-key)), and your [organization and project IDs](https://docs.ai.neevcloud.com/getting-started/org-and-project).
+You need Python 3.11+, a **Sandboxes** and a **Model API** key ([create a key](https://docs.ai.neevcloud.com/getting-started/create-api-key)), and your [organization and project IDs](https://docs.ai.neevcloud.com/getting-started/org-and-project#find-your-organization-id-and-project-id).
 
 ```bash
 python3.12 -m venv .venv
@@ -28,7 +28,7 @@ The report prints to the terminal and is saved to `report.md` (change it with `-
 
 1. **Sandbox.** The script starts a sandbox with no internet access and seeds a tiny project: a README, a config file, a stale lock file and a `.env` with fake secrets.
 2. **Agent.** An agent connects over MCP and is asked to set the project up, which naturally means reading `.env`, running a program and deleting the lock file.
-3. **Trail.** The script reads the sandbox's audit trail with `sandbox.audit()`, waiting a few seconds for the last records to arrive.
+3. **Trail.** The script reads the sandbox's audit trail with `sandbox.audit()`, waiting a few seconds for the last events to arrive.
 4. **Report.** It splits the script's setup from the agent's session, lists the agent's actions oldest first, counts them by tool and program, and flags sensitive reads (`.env`, SSH keys, `/etc/passwd`) and deletes.
 
 ## Use it in your product
@@ -39,12 +39,12 @@ The report prints to the terminal and is saved to `report.md` (change it with `-
 
 ## What the trail records
 
-Each record names the operation, the program and the path it acted on, the outcome, how long it took and the API key it ran under. It never records command arguments, file contents, or anything typed into a program. The agent here read `.env`, and the trail says so, but the secret values never enter it, which makes the trail safe to keep and share with an auditor.
+Each event names the operation, the program and the path it acted on, the outcome, how long it took and who made the call: a user, an API key, or the platform. It never records command arguments, file contents, or anything typed into a program. The agent here read `.env`, and the trail says so, but the secret values never enter it, which makes the trail safe to keep and share with an auditor.
 
 - The outcome is whether the call succeeded, not the program's exit code.
 - Commands the agent runs through the MCP `exec` tool currently show as `exec (program not recorded)`, so an `rm` run that way is not flagged as a delete. Commands run through the SDK name their program.
 - Work over MCP is recorded under the key that connected. Give each agent its own key to tell agents apart.
-- Lifecycle events (created, paused, deleted) are not in this trail. Records are kept for 30 days, but can't be read once the sandbox is deleted.
+- Lifecycle events (created, paused, deleted) are not in this trail. Events are kept for 30 days, but can't be read once the sandbox is deleted.
 
 ## Time and cost
 

@@ -2,8 +2,12 @@
 import contextlib
 import copy
 import json
+from datetime import datetime
 from types import SimpleNamespace
 
+from neevai import AuditEvent
+
+SANDBOX_ID = "01a10ca6-f39d-793d-b659-7aa536f71813"
 # Everything the real server lists, so tests can check the model only ever sees the workspace tools.
 SERVER_TOOLS = ("exec", "fs_read", "fs_write", "fs_list", "process_start", "delete_sandbox", "expose_port")
 
@@ -85,9 +89,23 @@ def text(content):
 
 def audit_record(command="curl", tool="exec", outcome="success", at="2026-10-06T10:00:00Z",
                  caller="3f9a12bc-1111-2222-3333-444455556666"):
-    """Builds one audit record; outcome is an enum-like value exposing .value, as the real SDK does."""
-    return SimpleNamespace(tool=tool, command=command, target=None, at=at, caller_source=caller,
-                           outcome=SimpleNamespace(value=outcome))
+    """Builds one audit event in the API's shape: the program is a process resource, the key is on the actor."""
+    resources = [{"type": "sandbox", "uid": SANDBOX_ID}]
+    if command is not None:
+        resources.append({"type": "process", "name": command})
+    failed = outcome != "success"
+    return AuditEvent.model_validate({
+        "class_uid": 6003, "class_name": "API Activity", "category_uid": 6, "category_name": "Application Activity",
+        "activity_id": 1, "activity_name": "Create", "type_uid": 600301, "type_name": "API Activity: Create",
+        "time": int(datetime.fromisoformat(at.replace("Z", "+00:00")).timestamp() * 1000),
+        "severity_id": 1, "severity": "Informational",
+        "status_id": 2 if failed else 1, "status": "Failure" if failed else "Success",
+        "actor": {"user": {"type": "API Key", "type_id": 99, "uid": caller,
+                           "programmatic_credentials": [{"uid": caller, "type": "API Key"}]}},
+        "api": {"operation": tool}, "resources": resources,
+        "device": {"type_id": 6, "type": "Virtual", "uid": SANDBOX_ID},
+        "cloud": {"provider": "NeevCloud", "account": {"uid": "prj-fake"}, "org": {"uid": "org-fake"}}, "osint": [],
+        "metadata": {"version": "1.9.0", "product": {"name": "Sandbox Audit", "vendor_name": "NeevCloud"}, "uid": "e1"}})
 
 
 class FakeSandbox:
@@ -142,7 +160,7 @@ class FakeSandbox:
     def audit(self, from_=None, limit=None, **kwargs):
         self.audit_queries.append(from_)
         page = self._audit_pages[0] if len(self._audit_pages) == 1 else self._audit_pages.pop(0)
-        return SimpleNamespace(records=page, next_cursor=None)
+        return SimpleNamespace(data=page, next_cursor=None)
 
     def delete(self):
         self.deleted = True

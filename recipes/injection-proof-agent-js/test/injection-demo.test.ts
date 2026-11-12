@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
   ALLOWED_HOST, attemptedExfiltration, AUDIT_POLL_INTERVAL_MS, blockedAndReachable, curlRecords, FIXTURE, missingEnv,
-  parseCli, PASTE_HOST, PASTE_URL, PYPI_URL, run, runBoundaryProbes, type Connect, type ExecResultLike,
+  parseCli, PASTE_HOST, PASTE_URL, program, PYPI_URL, run, runBoundaryProbes, type Connect, type ExecResultLike,
 } from "../injection-demo.ts";
 import type { ModelLike } from "../agent.ts";
 import { auditRecord, connector, fakeModel, fakeNeev, fakeSandbox, hangingModel, toolCall } from "./fakes.ts";
@@ -158,7 +158,7 @@ test("curlRecords polls from since until both probes appear", async () => {
     [auditRecord({ tool: "fs.read", command: undefined, target: "project/.env" }), auditRecord()],
     [auditRecord(), auditRecord({ command: "python3" }), auditRecord()]] });
   const records = await curlRecords(sb, "T0", { wait: async (ms) => { waited.push(ms); }, log: () => {} });
-  assert.deepEqual(records.map((r) => r.command), ["curl", "curl"]);
+  assert.deepEqual(records.map(program), ["curl", "curl"]);
   assert.deepEqual(waited, [AUDIT_POLL_INTERVAL_MS]);
   assert.deepEqual(sb.auditQueries, ["T0", "T0"]);
 });

@@ -1,6 +1,6 @@
 // test/fakes.ts: in-memory stand-ins for the sandbox's MCP session, the SDK sandbox, and a model client.
 import type { ModelLike, SessionLike } from "../agent.ts";
-import type { AuditRecordLike, Connect, ExecResultLike, SandboxLike } from "../injection-demo.ts";
+import type { AuditEventLike, Connect, ExecResultLike, SandboxLike } from "../injection-demo.ts";
 
 // Everything the real server lists, so tests can check the model only ever sees the workspace tools.
 const SERVER_TOOLS = ["exec", "fs_read", "fs_write", "fs_list", "process_start", "delete_sandbox", "expose_port"];
@@ -62,12 +62,19 @@ export const toolCall = (name: string, args: unknown, id = "c1"): Msg => ({
 });
 export const text = (content: string): Msg => ({ content });
 
-// auditRecord builds one audit record with the fields the script reads.
-export const auditRecord = (o: Partial<AuditRecordLike> = {}): AuditRecordLike => ({ tool: "exec", command: "curl", outcome: "success", ...o });
+// auditRecord builds one audit event in the API's shape: a program is a process resource, a path a file resource.
+export function auditRecord(o: { tool?: string; command?: string; target?: string; outcome?: string } = {}): AuditEventLike {
+  const { tool = "exec", outcome = "success" } = o;
+  const command = "command" in o ? o.command : "curl";
+  const resources: { type: string; name?: string }[] = [{ type: "sandbox" }];
+  if (o.target !== undefined) resources.push({ type: "file", name: o.target });
+  if (command !== undefined) resources.push({ type: "process", name: command });
+  return { api: { operation: tool }, resources, status: outcome === "success" ? "Success" : "Failure" };
+}
 
 // fakeSandbox mimics an SDK sandbox handle: records fixture writes and execs, scripts curl results, serves audit pages.
 export function fakeSandbox(o: { pasteExit?: number; pasteOut?: string; pypiExit?: number; pypiHttp?: string;
-  auditPages?: AuditRecordLike[][]; readyError?: Error } = {}) {
+  auditPages?: AuditEventLike[][]; readyError?: Error } = {}) {
   const { pasteExit = 28, pasteOut = "0 000", pypiExit = 0, pypiHttp = "200", readyError } = o;
   // Each audit() call takes one page; the last page repeats so extra polls still get records.
   const pages = o.auditPages ? [...o.auditPages] : [[auditRecord(), auditRecord()]];
@@ -91,7 +98,7 @@ export function fakeSandbox(o: { pasteExit?: number; pasteOut?: string; pypiExit
     async audit(params: { from?: string } = {}) {
       sb.auditQueries.push(params.from);
       sb.onAudit?.();
-      return { records: pages.length === 1 ? pages[0] : pages.shift()! };
+      return { data: pages.length === 1 ? pages[0] : pages.shift()! };
     },
     async delete() { sb.deleted = true; },
   } satisfies SandboxLike & Record<string, unknown>;
