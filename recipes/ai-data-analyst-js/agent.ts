@@ -1,10 +1,10 @@
-// Agent loop for the AI data analyst recipe: the model analyses a CSV by running Python in the sandbox over MCP.
+// Agent loop for the AI data analyst recipe: the model analyses a CSV by running Python in the sandbox's kernel over MCP.
 
-// MCP tools the model gets as-is; it writes and runs code only through run_python, never exec or fs_write directly.
+// MCP tools the model gets as-is; it runs code only through run_python, never exec or interpreter_run directly.
 export const AGENT_TOOLS = ["fs_list"] as const;
-const SCRIPT = "analysis.py";
 export const CHART = "chart.png";
 export const MAX_OUTPUT = 6000;
+const ANSI_COLOUR = /\x1b\[[0-9;]*m/g;
 
 // SessionLike is the part of an MCP client this loop uses.
 export interface SessionLike {
@@ -23,9 +23,11 @@ const RUN_PYTHON: OpenAITool = {
   type: "function",
   function: {
     name: "run_python",
-    description: "Runs a Python 3 script in the workspace and returns its exit code, stdout and stderr. " +
-      "Each call is a fresh process: variables do not carry over, so reload the data every time.",
-    parameters: { type: "object", properties: { code: { type: "string", description: "The full Python script." } }, required: ["code"] },
+    description: "Runs Python in the sandbox's persistent kernel and returns its stdout, stderr, results, error and " +
+      "end_reason. Variables, imports and loaded data carry over between calls, so load the data once and " +
+      "build on earlier results. A call gets about 45 seconds. end_reason kernel_restarted or memory_exceeded " +
+      "means the variables were lost: load the data again.",
+    parameters: { type: "object", properties: { code: { type: "string", description: "The Python code to run." } }, required: ["code"] },
   },
 };
 const FINISH: OpenAITool = {
@@ -37,10 +39,11 @@ const FINISH: OpenAITool = {
 };
 
 export const SYSTEM_PROMPT =
-  "You are a data analyst working in a Linux sandbox. The dataset is data.csv in the working directory. " +
-  "pandas and matplotlib are installed; do not install anything, there is no internet access. " +
-  "Use run_python to inspect the data first (columns, types, a few rows), then compute the answer with code. " +
-  "Never guess a number: every figure you report must come from a script's output. " +
+  "You are a data analyst working in a Python kernel in a Linux sandbox. The dataset is data.csv in the working directory. " +
+  "numpy, pandas and matplotlib are installed; do not install anything, there is no internet access. " +
+  "Use run_python to load the data once and inspect it (columns, types, a few rows); the kernel keeps your variables, " +
+  "so each later call builds on the DataFrame and the results you already have. " +
+  "Never guess a number: every figure you report must come from your code's output. " +
   "Save exactly one clear chart that answers the question to chart.png with matplotlib " +
   "(a title, labelled axes, readable tick labels, plt.savefig('chart.png', dpi=150, bbox_inches='tight')). " +
   "Then call finish with your findings.";
@@ -64,12 +67,15 @@ export async function openaiTools(session: SessionLike): Promise<OpenAITool[]> {
 const clip = (s: string) => (s.length <= MAX_OUTPUT ? s : `${s.slice(0, MAX_OUTPUT)}\n... [truncated ${s.length - MAX_OUTPUT} chars]`);
 
 // callTool calls one MCP tool and returns the text for the model; failures become errors the model can act on.
-export async function callTool(session: SessionLike, name: string, args: Record<string, unknown>, signal?: AbortSignal): Promise<string> {
+// keep trims a structured result before the model sees it.
+export async function callTool(
+  session: SessionLike, name: string, args: Record<string, unknown>, signal?: AbortSignal, keep = (data: any): unknown => data,
+): Promise<string> {
   let out: string;
   try {
     const r = await session.callTool({ name, arguments: args }, undefined, { signal });
     out = r.structuredContent !== undefined
-      ? JSON.stringify(r.structuredContent)
+      ? JSON.stringify(keep(r.structuredContent))
       : (Array.isArray(r.content) ? r.content : []).map((b: any) => b.text ?? "").join("\n");
     if (r.isError) out = `error: ${out}`;
   } catch (e) {
@@ -79,11 +85,16 @@ export async function callTool(session: SessionLike, name: string, args: Record<
   return clip(out);
 }
 
-// runPython writes the code to analysis.py with fs_write, then runs it with exec; MPLBACKEND=Agg since there is no display.
-export async function runPython(session: SessionLike, code: string, signal?: AbortSignal): Promise<string> {
-  const written = await callTool(session, "fs_write", { path: SCRIPT, content: code }, signal);
-  if (written.startsWith("error:")) return written;
-  return callTool(session, "exec", { program: "python3", args: [SCRIPT], env: ["MPLBACKEND=Agg"] }, signal);
+// cellText keeps a cell's text: the kernel returns each open figure as a base64 PNG, and tracebacks carry terminal colours.
+function cellText(cell: any) {
+  const results = (cell.results ?? []).filter((r: any) => "text/plain" in r).map((r: any) => r["text/plain"]);
+  const error = cell.error && { ...cell.error, traceback: (cell.error.traceback ?? []).map((l: string) => l.replace(ANSI_COLOUR, "")) };
+  return { ...cell, results, error: error ?? null };
+}
+
+// runPython runs the code in the sandbox's default kernel context with interpreter_run, so its variables persist.
+export function runPython(session: SessionLike, code: string, signal?: AbortSignal): Promise<string> {
+  return callTool(session, "interpreter_run", { code }, signal, cellText);
 }
 
 // parseArgs parses tool-call arguments, or returns null if they are not a JSON object.
@@ -157,8 +168,9 @@ export async function analyse(
           log(`   step ${step}: run_python (no code)`);
           result = NO_CODE;
         } else {
-          log(`   step ${step}: run_python (${code.split("\n").length} lines)`);
+          const ran = Date.now();
           try { result = await runPython(session, code, bounded); } catch (e) { outOfTime(e); }
+          log(`   step ${step}: run_python (${code.split("\n").length} lines, ran in ${((Date.now() - ran) / 1000).toFixed(1)}s)`);
         }
       } else {
         log(`   step ${step}: ${name} ${String(args.path ?? "")}`.trimEnd());

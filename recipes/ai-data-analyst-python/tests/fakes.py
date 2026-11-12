@@ -4,7 +4,8 @@ import json
 from types import SimpleNamespace
 
 # Everything the real server lists, so tests can check the model only ever sees the tools it is given.
-SERVER_TOOLS = ("exec", "fs_read", "fs_write", "fs_list", "process_start", "delete_sandbox", "rollback_sandbox", "expose_port")
+SERVER_TOOLS = ("exec", "fs_read", "fs_write", "fs_list", "interpreter_run", "process_start", "delete_sandbox",
+                "rollback_sandbox", "expose_port")
 
 
 def _ok(data):
@@ -16,19 +17,19 @@ def _err(message):
 
 
 def saves_chart(session, code):
-    """Default exec behaviour: a script that calls savefig writes chart.png, and the script's prints come back."""
+    """Default kernel behaviour: a cell that calls savefig writes chart.png, and the cell's prints come back."""
     if "savefig" in code:
         session.files["chart.png"] = "\x89PNG..."
-    return {"exit_code": 0, "stdout": "ok\n", "stderr": ""}
+    return {"stdout": "ok\n", "stderr": "", "results": [], "end_reason": "ok", "generation": "g1"}
 
 
 class FakeSession:
-    """Mimics an MCP session bound to one sandbox: fs_* backed by a dict, exec runs `on_exec(session, script)`."""
+    """Mimics an MCP session bound to one sandbox: fs_* backed by a dict, interpreter_run runs `on_run(session, code)`."""
 
-    def __init__(self, on_exec=saves_chart):
+    def __init__(self, on_run=saves_chart):
         self.files = {}
         self.calls = []
-        self.on_exec = on_exec
+        self.on_run = on_run
         self.raise_on = {}
         self.timeouts = []
 
@@ -43,19 +44,16 @@ class FakeSession:
         self.timeouts.append(read_timeout_seconds)
         if name in self.raise_on:
             raise self.raise_on[name]
-        if name == "fs_write":
-            self.files[args["path"]] = args["content"]
-            return _ok({"bytes_written": len(args["content"])})
         if name == "fs_read":
             if args["path"] not in self.files:
                 return _err(f'the sandbox refused this call: not_found: file not found: "{args["path"]}"')
             return _ok({"content": self.files[args["path"]], "size": len(self.files[args["path"]]), "eof": True})
         if name == "fs_list":
             return _ok({"entries": [{"name": n, "type": "file"} for n in sorted(self.files)]})
-        if name == "exec":
-            if not isinstance(args.get("env", []), list):  # the real server wants KEY=VALUE strings
-                return _err("invalid params: env must be an array")
-            return _ok(self.on_exec(self, self.files.get((args.get("args") or [""])[0], "")))
+        if name == "interpreter_run":
+            if set(args) - {"code", "context_id"}:  # the real schema sets additionalProperties: false
+                return _err(f"invalid params: {sorted(args)}")
+            return _ok(self.on_run(self, args["code"]))
         return _err(f"unexpected tool {name}")
 
 
