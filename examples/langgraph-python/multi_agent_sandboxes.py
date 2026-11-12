@@ -30,7 +30,7 @@ _RUN = uuid.uuid4().hex[:6]
 RESEARCHER_SANDBOX = f"crew-researcher-{_RUN}"
 WRITER_SANDBOX = f"crew-writer-{_RUN}"
 
-# The connection publishes 22 tools. Give each agent only what its job needs.
+# The connection publishes every lifecycle and runtime tool. Give each agent only what its job needs.
 AGENT_TOOLS = {"exec", "fs_read", "fs_write"}
 
 MARKER = "researcher-private-note"
